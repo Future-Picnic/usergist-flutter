@@ -131,12 +131,14 @@ class _IconButton extends StatelessWidget {
     required this.glyph,
     required this.color,
     required this.label,
+    this.regular = false,
   });
 
   final VoidCallback onPressed;
   final SurfaceGlyph glyph;
   final Color color;
   final String label;
+  final bool regular;
 
   @override
   Widget build(BuildContext context) {
@@ -156,13 +158,19 @@ class _IconButton extends StatelessWidget {
             radius: 22,
             child: Center(
               child: Container(
-                width: 32,
-                height: 32,
+                width: regular ? 44 : 32,
+                height: regular ? 44 : 32,
                 decoration: BoxDecoration(
                   color: surfaceWithOpacity(color, 0.08),
                   shape: BoxShape.circle,
                 ),
-                child: CustomPaint(painter: SurfaceGlyphPainter(glyph, color)),
+                child: CustomPaint(
+                  painter: SurfaceGlyphPainter(
+                    glyph,
+                    color,
+                    stroke: regular ? 2 : 1.75,
+                  ),
+                ),
               ),
             ),
           ),
@@ -180,6 +188,7 @@ class SurfaceClose extends StatelessWidget {
     required this.onPressed,
     required this.color,
     this.label = 'Close',
+    this.regular = false,
     super.key,
   });
 
@@ -192,12 +201,16 @@ class SurfaceClose extends StatelessWidget {
   /// Accessibility label.
   final String label;
 
+  /// Matches the compact landscape primary action's visible height.
+  final bool regular;
+
   @override
   Widget build(BuildContext context) => _IconButton(
         onPressed: onPressed,
         glyph: SurfaceGlyph.close,
         color: color,
         label: label,
+        regular: regular,
       );
 }
 
@@ -208,6 +221,7 @@ class SurfaceBack extends StatelessWidget {
     required this.onPressed,
     required this.color,
     this.label = 'Back',
+    this.regular = false,
     super.key,
   });
 
@@ -220,12 +234,16 @@ class SurfaceBack extends StatelessWidget {
   /// Accessibility label.
   final String label;
 
+  /// Matches the compact landscape primary action's visible height.
+  final bool regular;
+
   @override
   Widget build(BuildContext context) => _IconButton(
         onPressed: onPressed,
         glyph: SurfaceGlyph.back,
         color: color,
         label: label,
+        regular: regular,
       );
 }
 
@@ -410,7 +428,13 @@ class SurfaceSecondary extends StatelessWidget {
 /// centre takes the remaining width (progress, title or step count).
 class SurfaceHeader extends StatelessWidget {
   /// Creates the header.
-  const SurfaceHeader({this.leading, this.center, this.trailing, super.key});
+  const SurfaceHeader({
+    this.leading,
+    this.center,
+    this.trailing,
+    this.balancedSides = false,
+    super.key,
+  });
 
   /// Leading slot (Close, Back).
   final Widget? leading;
@@ -421,6 +445,9 @@ class SurfaceHeader extends StatelessWidget {
   /// Trailing slot (landscape primary action).
   final Widget? trailing;
 
+  /// Reserves matching space for landscape Close + Back and the action.
+  final bool balancedSides;
+
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
@@ -428,7 +455,7 @@ class SurfaceHeader extends StatelessWidget {
       child: Row(
         children: <Widget>[
           ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 48),
+            constraints: BoxConstraints(minWidth: balancedSides ? 104 : 48),
             child: leading ?? const SizedBox.shrink(),
           ),
           const SizedBox(width: 8),
@@ -437,7 +464,10 @@ class SurfaceHeader extends StatelessWidget {
           ConstrainedBox(
             // Long header action labels wrap within this width instead of
             // squeezing the title.
-            constraints: const BoxConstraints(minWidth: 48, maxWidth: 320),
+            constraints: BoxConstraints(
+              minWidth: balancedSides ? 104 : 48,
+              maxWidth: 320,
+            ),
             child: Align(
               alignment: AlignmentDirectional.centerEnd,
               widthFactor: 1,

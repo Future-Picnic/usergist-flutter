@@ -11,7 +11,7 @@ and React Native SDKs.
 
 ```yaml
 dependencies:
-  usergist_feedback: ^0.2.1
+  usergist_feedback: ^0.2.3
 ```
 
 Initialization finishes after local storage is hydrated. Session and mutation

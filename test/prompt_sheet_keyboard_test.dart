@@ -63,13 +63,13 @@ void main() {
     final bounds = tester.getRect(next);
     expect(bounds.top, greaterThanOrEqualTo(0));
     expect(bounds.bottom, lessThanOrEqualTo(160));
-    // Landscape keeps Submit as the full-width footer, below the field and
-    // outside the scrolling question (never a compact header action).
+    // Landscape keeps the compact Submit in the header, outside the scroller.
     final footer =
         tester.getRect(find.byKey(const ValueKey<String>('feedback-next')));
-    expect(footer.width, greaterThan(400));
-    expect(footer.top,
-        greaterThanOrEqualTo(tester.getRect(find.byType(TextField)).top));
+    expect(footer.width, lessThan(200));
+    expect(footer.bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(SingleChildScrollView).first).top));
+    expect(find.byKey(const ValueKey<String>('feedback-footer')), findsNothing);
     expect(
       find.ancestor(
         of: find.byKey(const ValueKey<String>('feedback-next')),

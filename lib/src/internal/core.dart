@@ -1355,7 +1355,8 @@ class UserGistCore {
   }
 
   /// Reports a user response back from the UI presenter.
-  void reportResponse(PromptResponseInfo info) {
+  void reportResponse(PromptResponseInfo info, {void Function()? onSaved}) {
+    final generation = _resetGeneration;
     _respCtrl.add(info);
     final payload = <String, Object?>{
       'idempotencyKey': newUuid(),
@@ -1376,7 +1377,13 @@ class UserGistCore {
             MutationPurpose.feedback,
             payload,
           )
-          .then((_) => _flushMutations())
+          .then((_) {
+            if (!info.dismissed && !_disposed && !_resetInProgress &&
+                generation == _resetGeneration && _consent.isFeedbackGranted) {
+              onSaved?.call();
+            }
+            return _flushMutations();
+          })
           .catchError((Object error, StackTrace stack) {
         log.e('feedback response persistence failed', error, stack);
         return <String>{};

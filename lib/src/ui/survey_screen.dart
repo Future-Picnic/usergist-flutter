@@ -1,10 +1,7 @@
 part of 'survey_presenter.dart';
 
-// Full-screen survey. Header: when Back is usable it takes the leading slot
-// and Close moves to the trailing slot; otherwise Close is leading and the
-// trailing slot stays empty. Progress stays centred. Next/Submit (or the end
-// CTA) is one full-width action in a readable-width footer outside the
-// scrolling question, above the keyboard, in portrait and landscape alike.
+// Landscape keeps Close + Back, progress and the primary action in one row.
+// Portrait retains Back leading, Close trailing and the full-width footer.
 
 class _SurveyScreen extends StatefulWidget {
   const _SurveyScreen({
@@ -98,6 +95,7 @@ class _SurveyScreenState extends State<_SurveyScreen> {
             key: const ValueKey<String>('survey-back'),
             onPressed: _goBack,
             color: theme.text,
+            regular: landscape,
           )
         : null;
     final next = question == null
@@ -109,15 +107,17 @@ class _SurveyScreenState extends State<_SurveyScreen> {
             label: _isFinal(question) ? 'Submit' : 'Next',
             disabled: !_inlineNextEnabled(question),
             loading: _submitting,
-            expand: true,
+            compact: landscape,
+            expand: !landscape,
           );
-    final endCta = _ended ? _endAction(theme) : null;
+    final endCta = _ended ? _endAction(theme, landscape) : null;
     final close = SurfaceClose(
       key: const ValueKey<String>('survey-close'),
       onPressed: _ended
           ? () => Navigator.of(context).pop()
           : () => unawaited(_requestClose()),
       color: theme.text,
+      regular: landscape,
     );
     final footerAction = endCta ?? (needsNext ? next : null);
     final footerBottom =
@@ -142,21 +142,45 @@ class _SurveyScreenState extends State<_SurveyScreen> {
               children: <Widget>[
                 Padding(
                   padding: EdgeInsets.fromLTRB(
-                    12,
+                    landscape ? 24 : 12,
                     layout.safe.top + (landscape ? 8 : 4),
-                    12,
+                    landscape ? 24 : 12,
                     4,
                   ),
-                  child: SurfaceHeader(
-                    leading: back ?? close,
-                    center: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 320),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: _progress(theme),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: landscape
+                            ? kSurfaceContentMaxWidth
+                            : double.infinity,
+                      ),
+                      child: SurfaceHeader(
+                        balancedSides: landscape,
+                        leading: landscape
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  close,
+                                  if (back != null) ...<Widget>[
+                                    const SizedBox(width: 8),
+                                    back,
+                                  ],
+                                ],
+                              )
+                            : back ?? close,
+                        center: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: _progress(theme),
+                          ),
+                        ),
+                        trailing: landscape
+                            ? footerAction
+                            : back != null ? close : null,
                       ),
                     ),
-                    trailing: back != null ? close : null,
                   ),
                 ),
                 Expanded(
@@ -177,7 +201,7 @@ class _SurveyScreenState extends State<_SurveyScreen> {
                         : _questionScreen(theme, landscape),
                   ),
                 ),
-                if (footerAction != null)
+                if (!landscape && footerAction != null)
                   Padding(
                     key: const ValueKey<String>('survey-footer'),
                     padding: EdgeInsets.fromLTRB(
@@ -374,7 +398,7 @@ class _SurveyScreenState extends State<_SurveyScreen> {
     );
   }
 
-  Widget _endAction(ResolvedPromptTheme theme) {
+  Widget _endAction(ResolvedPromptTheme theme, bool landscape) {
     final end = _survey.endScreen ?? _flow.endScreen;
     final cta = end?.cta;
     return SurfaceNext(
@@ -382,7 +406,8 @@ class _SurveyScreenState extends State<_SurveyScreen> {
       onPressed: () => unawaited(_endCta(cta)),
       theme: theme,
       label: cta?.label ?? 'Done',
-      expand: true,
+      compact: landscape,
+      expand: !landscape,
     );
   }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3 — landscape navigation and saved feedback
+
+- Keep Close, Back, progress and Next/Submit in one aligned landscape header; retain the portrait footer and keyboard-safe answer field.
+- Confirm durable local feedback storage before automatic sending, and clear the acknowledgement on reset or detach.
+- Preserve campaign themes and existing identity, consent and response behavior.
+- The 0.2.2 source candidate was not published because its changelog entry was missing.
+
 ## 0.2.1 — release QA and surface design
 
 - Refresh themed feedback, surveys, in-app messages and requests, including keyboard-safe fields and responsive NPS scales.

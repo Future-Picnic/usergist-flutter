@@ -45,7 +45,7 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.2.1';
+  static const String sdkVersion = '0.2.3';
 
   static UserGistCore? _core;
   static void Function(PushSubscriptionState)? _pushSubscriptionHandler;
@@ -410,8 +410,8 @@ class UserGist {
       _core?.showRequests ?? const Stream<PromptShowRequest>.empty();
 
   /// Internal: reports a user response from the presenter.
-  static void internalReportResponse(PromptResponseInfo info) {
-    _core?.reportResponse(info);
+  static void internalReportResponse(PromptResponseInfo info, {void Function()? onSaved}) {
+    _core?.reportResponse(info, onSaved: onSaved);
   }
 
   /// Internal: reports that the sheet has been shown.

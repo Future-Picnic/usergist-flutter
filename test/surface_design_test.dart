@@ -81,7 +81,7 @@ void main() {
   });
 
   testWidgets('feedback sheet spans the full width in landscape with Close '
-      'leading and a full-width footer action', (tester) async {
+      'leading and an aligned compact header action', (tester) async {
     _setView(tester, const Size(900, 420));
     await _openSheet(tester, _textPrompt);
 
@@ -90,13 +90,14 @@ void main() {
     final close = tester.getRect(find.bySemanticsLabel('Close'));
     final submit = tester.getRect(find.byKey(const ValueKey('feedback-next')));
     final field = tester.getRect(find.byType(TextField));
-    // Close leading; feedback has no Back, so nothing trails in the header.
-    expect(close.left, lessThan(80));
+    // Header and input share the same readable measure and outer edges.
+    expect(close.left, closeTo(field.left, 1));
     expect(find.bySemanticsLabel('Back'), findsNothing);
-    // Submit is the footer below the question, spanning the readable column.
-    expect(submit.top, greaterThan(field.bottom));
-    expect(submit.width, greaterThan(kSurfaceContentMaxWidth - 40));
-    expect((submit.center.dx - 450).abs(), lessThan(1));
+    expect(submit.right, closeTo(field.right, 1));
+    expect(submit.bottom, lessThan(field.top));
+    expect(submit.width, lessThan(150));
+    expect(submit.center.dy, closeTo(close.center.dy, 1));
+    expect(find.byKey(const ValueKey('feedback-footer')), findsNothing);
     // Content keeps the 560 readable measure, centred.
     expect(field.width, lessThanOrEqualTo(kSurfaceContentMaxWidth));
     expect((field.center.dx - 450).abs(), lessThan(1));

@@ -72,12 +72,15 @@ void main() {
       await core.start();
       await core.setConsent(const Consent(analytics: true, feedback: true));
       core.track('qa.native-platform', <String, Object?>{'typed': true});
+      final saved = Completer<void>();
       core.reportResponse(
         const PromptResponseInfo(
           promptId: 'rating-prompt', dismissed: false, latencyMs: 123,
           answers: [ResponseAnswer(questionId: 'rating', value: 5)],
         ),
+        onSaved: () => saved.complete(),
       );
+      await saved.future.timeout(const Duration(seconds: 5));
       final request = await responseRequest.future.timeout(const Duration(seconds: 5));
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['platform'], nativeOs ?? 'flutter');
