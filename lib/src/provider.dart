@@ -56,7 +56,9 @@ class _UserGistProviderState extends State<UserGistProvider> {
       stream: UserGist.internalShowStream,
       onShown: UserGist.internalReportShown,
       onPresentationFailed: UserGist.internalReportPromptPresentationFailed,
-      onResponded: UserGist.internalReportResponse,
+      onResponded: (info) => UserGist.internalReportResponse(
+        info, onSaved: () => _presenter.showSavedNotice(info.promptId),
+      ),
       themeOverrides: UserGist.internalThemeOverrides,
       coordinator: _modalCoordinator,
     );

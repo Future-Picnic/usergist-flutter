@@ -89,8 +89,8 @@ Future<List<Map<String, Object?>>> _present(
 
 void main() {
   testWidgets(
-      'landscape survey: Close leads without Back, Back leads + Close trails '
-      'with Back, Next/Submit is a full-width footer', (tester) async {
+      'landscape survey: Close then Back and primary share an aligned header',
+      (tester) async {
     tester.view.physicalSize = const Size(900, 420);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -98,31 +98,33 @@ void main() {
     final completed = await _present(tester, deliver: true);
 
     expect(find.text('What do you use it for?'), findsOneWidget);
-    // First question: no Back, Close leading, trailing slot empty.
+    // First question: no Back, Close leading and compact Next trailing.
     expect(find.bySemanticsLabel('Back'), findsNothing);
     final close = tester.getRect(find.byKey(const ValueKey('survey-close')));
     final next = tester.getRect(find.byKey(const ValueKey('survey-next')));
     final title = tester.getRect(find.text('What do you use it for?'));
-    expect(close.left, lessThan(80));
-    // Footer: below the question, centred readable width, never compact.
-    expect(next.top, greaterThan(title.bottom));
-    expect(next.width, greaterThan(kSurfaceContentMaxWidth - 40));
-    expect((next.center.dx - 450).abs(), lessThan(1));
-    expect(next.bottom, lessThanOrEqualTo(420));
+    expect(close.left, closeTo((900 - kSurfaceContentMaxWidth) / 2, 1));
+    expect(next.bottom, lessThan(title.top));
+    expect(next.width, lessThan(150));
+    expect(next.center.dy, closeTo(close.center.dy, 1));
+    expect(find.byKey(const ValueKey('survey-footer')), findsNothing);
 
     await tester.tap(find.text('Lists'));
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('survey-next')));
     await tester.pumpAndSettle();
     expect(find.text('Anything else?'), findsOneWidget);
-    // With Back: Back leading, Close trailing, Back absent from the footer.
+    // With Back: Close then Back on the left, Submit on the right.
     final back = tester.getRect(find.byKey(const ValueKey('survey-back')));
     final trailingClose =
         tester.getRect(find.byKey(const ValueKey('survey-close')));
     final submitRect = tester.getRect(find.byKey(const ValueKey('survey-next')));
-    expect(back.left, lessThan(80));
-    expect(trailingClose.right, greaterThan(820));
-    expect(back.bottom, lessThan(submitRect.top));
+    expect(trailingClose.right, lessThan(back.left));
+    expect(back.right, lessThan(submitRect.left));
+    expect(back.center.dy, closeTo(submitRect.center.dy, 1));
+    final field = tester.getRect(find.byType(TextField));
+    expect(field.left, closeTo(trailingClose.left, 1));
+    expect(field.right, closeTo(submitRect.right, 1));
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('survey-footer')),
@@ -134,8 +136,8 @@ void main() {
       find.byKey(const ValueKey('survey-next')),
     );
     expect(submit.label, 'Submit');
-    expect(submit.compact, isFalse);
-    expect(submit.expand, isTrue);
+    expect(submit.compact, isTrue);
+    expect(submit.expand, isFalse);
 
     await tester.tap(find.bySemanticsLabel('Back'));
     await tester.pumpAndSettle();
@@ -152,18 +154,18 @@ void main() {
     expect(completed.single['why'], 'Shared lists');
     expect(completed.single['use'], <String>['lists']);
     expect(find.text('Thanks!'), findsOneWidget);
-    // End screen: no Back, Close leading, Done is the full-width footer CTA.
+    // End screen retains the same compact header action.
     expect(find.bySemanticsLabel('Back'), findsNothing);
     final endClose = tester.getRect(find.byKey(const ValueKey('survey-close')));
     final done =
         tester.getRect(find.byKey(const ValueKey('survey-complete-close')));
-    expect(endClose.left, lessThan(80));
-    expect(done.top, greaterThan(tester.getRect(find.text('Thanks!')).bottom));
-    expect(done.width, greaterThan(kSurfaceContentMaxWidth - 40));
+    expect(endClose.left, closeTo(close.left, 1));
+    expect(done.bottom, lessThan(tester.getRect(find.text('Thanks!')).top));
+    expect(done.width, lessThan(150));
     expect(find.text('Done'), findsOneWidget);
   });
 
-  testWidgets('keyboard open: footer Submit stays above the keyboard in '
+  testWidgets('keyboard open: Submit and entered text stay visible in '
       'portrait and landscape', (tester) async {
     for (final size in const <Size>[Size(390, 844), Size(844, 390)]) {
       tester.view.physicalSize = size;
@@ -187,13 +189,15 @@ void main() {
 
       final submit =
           tester.getRect(find.byKey(const ValueKey('survey-next')));
-      final footer =
-          tester.getRect(find.byKey(const ValueKey('survey-footer')));
+      final landscape = size.width > size.height;
+      final contentBottom = landscape
+          ? size.height - keyboard
+          : tester.getRect(find.byKey(const ValueKey('survey-footer'))).top;
       final headerBottom =
           tester.getRect(find.byKey(const ValueKey('survey-close'))).bottom;
       expect(submit.bottom, lessThanOrEqualTo(size.height - keyboard));
-      expect(submit.width, greaterThan(300));
-      // The entered text's first line is visible between header and footer.
+      expect(submit.width, landscape ? lessThan(150) : greaterThan(300));
+      // The entered text's first line remains in the visible content viewport.
       final editable = tester
           .state<EditableTextState>(find.byType(EditableText))
           .renderEditable;
@@ -205,14 +209,19 @@ void main() {
       final lineBottom =
           editable.localToGlobal(lineLocal.bottomLeft).dy;
       expect(lineTop, greaterThanOrEqualTo(headerBottom));
-      expect(lineBottom, lessThanOrEqualTo(footer.top));
+      expect(lineBottom, lessThanOrEqualTo(contentBottom));
       expect(lineBottom - lineTop, greaterThanOrEqualTo(16));
-      // Header keeps Back leading and Close trailing with the keyboard up.
       final back = tester.getRect(find.byKey(const ValueKey('survey-back')));
       final close = tester.getRect(find.byKey(const ValueKey('survey-close')));
-      expect(back.left, lessThan(close.left));
-      expect(back.bottom, lessThan(submit.top));
-      // Footer sits outside the scrolling question.
+      if (landscape) {
+        expect(close.right, lessThan(back.left));
+        expect(back.center.dy, closeTo(submit.center.dy, 1));
+        expect(find.byKey(const ValueKey('survey-footer')), findsNothing);
+      } else {
+        expect(back.left, lessThan(close.left));
+        expect(back.bottom, lessThan(submit.top));
+      }
+      // Both action placements sit outside the scrolling question.
       expect(
         find.ancestor(
           of: find.byKey(const ValueKey('survey-next')),

@@ -8,6 +8,7 @@ import '../models/response_info.dart';
 import '../models/theme.dart';
 import 'prompt_sheet.dart';
 import 'modal_coordinator.dart';
+import 'theme_resolver.dart';
 
 /// Lightweight representation of a "show this prompt" request emitted
 /// from the SDK core to the UI layer.
@@ -58,6 +59,53 @@ class PromptPresenter {
   bool _routeActive = false;
   bool _suppressOutcome = false;
   final List<PromptShowRequest> _pending = <PromptShowRequest>[];
+  String? _lastPromptId;
+  ResolvedPromptTheme? _lastTheme;
+  OverlayEntry? _savedNotice;
+  Timer? _savedNoticeTimer;
+
+  void _clearSavedNotice() {
+    _savedNoticeTimer?.cancel();
+    _savedNoticeTimer = null;
+    _savedNotice?.remove();
+    _savedNotice = null;
+  }
+
+  /// Acknowledges durable local storage, without claiming server delivery.
+  void showSavedNotice(String promptId) {
+    final context = _context;
+    final theme = _lastTheme;
+    if (context == null || !context.mounted || theme == null ||
+        _lastPromptId != promptId) return;
+    final overlay = Navigator.maybeOf(context, rootNavigator: true)?.overlay ??
+        Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    _clearSavedNotice();
+    final entry = OverlayEntry(builder: (_) => Positioned(
+      left: 16, right: 16, bottom: 16,
+      child: IgnorePointer(child: SafeArea(top: false, child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Semantics(liveRegion: true, child: Material(
+            color: theme.background,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(theme.radius),
+              side: BorderSide(color: theme.border),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Text('Feedback saved. We’ll send it automatically.',
+                style: TextStyle(color: theme.text, fontFamily: theme.fontFamily,
+                  fontSize: 14), textAlign: TextAlign.center),
+            ),
+          )),
+        ),
+      ))),
+    ));
+    _savedNotice = entry;
+    overlay.insert(entry);
+    _savedNoticeTimer = Timer(const Duration(seconds: 4), _clearSavedNotice);
+  }
 
   /// Attaches the presenter to a Navigator-owning context.
   void attach(BuildContext context) {
@@ -71,6 +119,8 @@ class PromptPresenter {
 
   /// Detaches the presenter (stops listening / drops the context).
   Future<void> detach() async {
+    _clearSavedNotice();
+    _lastPromptId = null;
     await _sub?.cancel();
     _sub = null;
     _context = null;
@@ -84,6 +134,8 @@ class PromptPresenter {
   /// Clears queued prompts and closes an active SDK prompt without producing
   /// a synthetic user dismissal.
   Future<void> reset() async {
+    _clearSavedNotice();
+    _lastPromptId = null;
     _pending.clear();
     final context = _context;
     if (!_routeActive || context == null || !context.mounted) return;
@@ -110,6 +162,9 @@ class PromptPresenter {
           return;
         }
         final startedAt = DateTime.now();
+        _lastPromptId = req.prompt.id;
+        _lastTheme = ResolvedPromptTheme.of(ctx,
+          serverTheme: req.prompt.theme, overrides: themeOverrides);
         var partialAnswers = const <ResponseAnswer>[];
         _routeActive = true;
         final presentation = showModalBottomSheet<PromptSheetResult>(

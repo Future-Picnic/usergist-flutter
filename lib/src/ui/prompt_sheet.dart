@@ -34,10 +34,8 @@ class PromptSheetResult {
 /// [PromptSheetResult] once finished.
 ///
 /// The sheet background always spans the full screen width with the theme's
-/// top radius. Feedback has no Back, so Close sits at the leading safe edge and
-/// the trailing slot stays empty. Next/Submit is one full-width footer action
-/// outside the scrolling question, above the keyboard, in portrait and
-/// landscape. Question and footer share one centred readable column.
+/// top radius. Landscape keeps Close and Next/Submit in the same header row,
+/// aligned with the question. Portrait retains the full-width footer action.
 class PromptSheet extends StatefulWidget {
   /// Creates the sheet.
   const PromptSheet({
@@ -103,7 +101,8 @@ class _PromptSheetState extends State<PromptSheet> {
       label: isLast ? 'Submit' : 'Next',
       disabled: _nextRequiresAnswer(current) &&
           !_answerHasValue(_answers[current.id]),
-      expand: true,
+      compact: landscape,
+      expand: !landscape,
     );
     final bottomInset = keyboardOpen
         ? 12.0
@@ -128,23 +127,39 @@ class _PromptSheetState extends State<PromptSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            SurfaceHeader(
-              leading: SurfaceClose(
-                key: const ValueKey<String>('feedback-close'),
-                onPressed: _dismiss,
-                color: theme.text,
-              ),
-              center: questions.length > 1
-                  ? Text(
-                      '${_index + 1} of ${questions.length}',
-                      style: theme.textStyle(
-                        color: theme.subtext,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        tabular: true,
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: landscape
+                      ? kSurfaceContentMaxWidth
+                      : double.infinity,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: landscape ? 12 : 0),
+                  child: SurfaceHeader(
+                    balancedSides: landscape,
+                    leading: SurfaceClose(
+                      key: const ValueKey<String>('feedback-close'),
+                      onPressed: _dismiss,
+                      color: theme.text,
+                      regular: landscape,
+                    ),
+                    center: questions.length > 1
+                        ? Text(
+                            '${_index + 1} of ${questions.length}',
+                            style: theme.textStyle(
+                              color: theme.subtext,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              tabular: true,
+                            ),
+                          )
+                        : null,
+                    trailing: landscape && needsNext ? next : null,
                       ),
-                    )
-                  : null,
+                ),
+              ),
             ),
             Flexible(
               child: Align(
@@ -165,7 +180,7 @@ class _PromptSheetState extends State<PromptSheet> {
                           child: _questionSwitcher(current, theme),
                         ),
                       ),
-                      if (needsNext)
+                      if (!landscape && needsNext)
                         Padding(
                           key: const ValueKey<String>('feedback-footer'),
                           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
