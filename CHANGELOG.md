@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Preserve partial feedback answers when the sheet is dismissed by tapping the backdrop or pressing system Back. Account reset continues to close the sheet without submitting a user response.
+
 ## 0.1.4 — identity lifecycle
 
 - Coordinate logout with startup before starting network delivery, confirm restored identity only after session validation, and keep explicit push invalidation effective across retries and restart.

@@ -34,6 +34,7 @@ class PromptSheet extends StatefulWidget {
   const PromptSheet({
     required this.prompt,
     required this.themeOverrides,
+    this.onAnswersChanged,
     super.key,
   });
 
@@ -42,6 +43,9 @@ class PromptSheet extends StatefulWidget {
 
   /// Caller-supplied global theme (merged under the per-prompt server theme).
   final PromptTheme? themeOverrides;
+
+  /// Retains partial answers when the enclosing route is dismissed externally.
+  final ValueChanged<List<ResponseAnswer>>? onAnswersChanged;
 
   @override
   State<PromptSheet> createState() => _PromptSheetState();
@@ -334,7 +338,12 @@ class _PromptSheetState extends State<PromptSheet> {
   void _setAnswerValue(String id, Object? value) {
     if (!mounted) return;
     setState(() => _answers[id] = value);
+    widget.onAnswersChanged?.call(_answerSnapshot());
   }
+
+  List<ResponseAnswer> _answerSnapshot() => _answers.entries
+      .map((entry) => ResponseAnswer(questionId: entry.key, value: entry.value))
+      .toList(growable: false);
 
   void _advance() {
     if (_closing) return;
@@ -346,14 +355,7 @@ class _PromptSheetState extends State<PromptSheet> {
       return;
     }
     _closing = true;
-    final answers = _answers.entries
-        .map(
-          (entry) => ResponseAnswer(
-            questionId: entry.key,
-            value: entry.value,
-          ),
-        )
-        .toList(growable: false);
+    final answers = _answerSnapshot();
     Navigator.of(context).pop(
       PromptSheetResult(dismissed: false, answers: answers),
     );
@@ -363,14 +365,7 @@ class _PromptSheetState extends State<PromptSheet> {
     if (_closing) return;
     _closing = true;
     _advanceTimer?.cancel();
-    final answers = _answers.entries
-        .map(
-          (entry) => ResponseAnswer(
-            questionId: entry.key,
-            value: entry.value,
-          ),
-        )
-        .toList(growable: false);
+    final answers = _answerSnapshot();
     Navigator.of(context).pop(
       PromptSheetResult(
         dismissed: true,

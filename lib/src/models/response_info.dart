@@ -30,7 +30,7 @@ class PromptResponseInfo {
   /// Prompt that was responded to.
   final String promptId;
 
-  /// `true` if the user dismissed the prompt without answering.
+  /// `true` if the user closed the prompt before completion; answers may exist.
   final bool dismissed;
 
   /// The answers provided (may be empty when dismissed).

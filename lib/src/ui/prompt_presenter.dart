@@ -110,6 +110,7 @@ class PromptPresenter {
           return;
         }
         final startedAt = DateTime.now();
+        var partialAnswers = const <ResponseAnswer>[];
         _routeActive = true;
         final presentation = showModalBottomSheet<PromptSheetResult>(
           context: ctx,
@@ -121,6 +122,7 @@ class PromptPresenter {
           builder: (_) => PromptSheet(
             prompt: req.prompt,
             themeOverrides: themeOverrides,
+            onAnswersChanged: (answers) => partialAnswers = answers,
           ),
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -138,7 +140,7 @@ class PromptPresenter {
           PromptResponseInfo(
             promptId: req.prompt.id,
             dismissed: dismissed,
-            answers: result?.answers ?? const <ResponseAnswer>[],
+            answers: result?.answers ?? partialAnswers,
             latencyMs: latency,
           ),
         );

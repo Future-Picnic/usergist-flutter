@@ -45,7 +45,7 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.1.4';
+  static const String sdkVersion = '0.1.5';
 
   static UserGistCore? _core;
   static void Function(PushSubscriptionState)? _pushSubscriptionHandler;
