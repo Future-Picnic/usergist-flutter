@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0 — aligned SDK release train
+
+- Align the pub.dev package and runtime version with the platform SDKs at 0.2.0. The APIs and partial feedback answer protection from 0.1.6 are unchanged.
+- Update the Flutter dependency and rebuild the host app to adopt the aligned release.
+
 ## 0.1.6
 
 - Include the partial-answer fix below and exclude release metadata from the pub.dev archive.
