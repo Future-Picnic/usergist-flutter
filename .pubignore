@@ -2,3 +2,5 @@
 build/
 coverage/
 example/pubspec.lock
+# Public release metadata is not part of the Dart package.
+/tools/

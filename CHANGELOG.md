@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.5
+## 0.1.6
+
+- Include the partial-answer fix below and exclude release metadata from the pub.dev archive.
+
+## 0.1.5 (source tag only; pub.dev publication blocked)
 
 - Preserve partial feedback answers when the sheet is dismissed by tapping the backdrop or pressing system Back. Account reset continues to close the sheet without submitting a user response.
 
