@@ -41,7 +41,8 @@ class IngestContext {
   /// Device model identifier.
   final String? deviceModel;
 
-  /// SDK platform identifier. Always `flutter`.
+  /// Delivery platform. Native runtime supplies `ios` or `android`;
+  /// `flutter` remains the fallback for legacy/desktop contexts.
   final String platform;
 
   /// JSON representation.
@@ -69,6 +70,7 @@ class IngestContext {
     String? osName,
     String? osVersion,
     String? deviceModel,
+    String? platform,
   }) =>
       IngestContext(
         anonymousId: anonymousId ?? this.anonymousId,
@@ -80,5 +82,6 @@ class IngestContext {
         osName: osName ?? this.osName,
         osVersion: osVersion ?? this.osVersion,
         deviceModel: deviceModel ?? this.deviceModel,
+        platform: platform ?? this.platform,
       );
 }

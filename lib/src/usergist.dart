@@ -45,7 +45,7 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.2.0';
+  static const String sdkVersion = '0.2.1';
 
   static UserGistCore? _core;
   static void Function(PushSubscriptionState)? _pushSubscriptionHandler;
@@ -167,6 +167,7 @@ class UserGist {
       core.onIdentityState = _identityStateHandler;
       await core.start(deferNetworkDelivery: true);
       _core = core;
+      await core.setPushPermissionGranted(_pushPermissionGranted, retry: false);
       if (!_resetPending) core.startNetworkDelivery();
     } on Object catch (err, st) {
       internalPresentationGate.invalidate();
@@ -193,6 +194,9 @@ class UserGist {
     }
   }
 
+  /// Reports the host screen used by campaign allow/deny lists.
+  static void setScreenName(String? name) => _core?.setScreenName(name);
+
   /// Records an event. Non-blocking from the caller's perspective.
   static void track(
     String eventName, {
@@ -206,6 +210,17 @@ class UserGist {
       log.e('track failed', err, st);
     }
   }
+
+  static bool _pushPermissionGranted = true;
+
+  /// Report OS permission before init and after Settings changes. Hosts own FCM/APNs.
+  static Future<void> setPushPermissionGranted(bool granted) async {
+    _pushPermissionGranted = granted;
+    await _core?.setPushPermissionGranted(granted);
+  }
+
+  /// Returns the persisted choice after [init] completes.
+  static Consent getConsent() => _core?.consent ?? const Consent();
 
   /// Sets consent. Transport is blocked until at least one purpose is granted.
   static Future<void> setConsent(Consent purposes) async {

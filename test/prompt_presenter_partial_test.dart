@@ -56,7 +56,7 @@ void main() {
       } else if (dismissal == 'reset') {
         unawaited(presenter.reset());
       } else {
-        await tester.tap(find.byIcon(Icons.close));
+        await tester.tap(find.bySemanticsLabel('Close'));
       }
       await tester.pumpAndSettle();
       if (dismissal == 'reset') {

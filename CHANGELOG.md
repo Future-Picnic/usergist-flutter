@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — release QA and surface design
+
+- Refresh themed feedback, surveys, in-app messages and requests, including keyboard-safe fields and responsive NPS scales.
+- Improve identity, consent, frequency-limit and queued-delivery handling.
+- Correct native JSON notification actions, requests consent checks, push revocation and app-version reporting.
+
 ## 0.2.0 — aligned SDK release train
 
 - Align the pub.dev package and runtime version with the platform SDKs at 0.2.0. The APIs and partial feedback answer protection from 0.1.6 are unchanged.

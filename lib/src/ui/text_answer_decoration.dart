@@ -1,32 +1,34 @@
 import 'package:flutter/material.dart';
 
+import 'surface_tokens.dart';
 import 'theme_resolver.dart';
 
-/// Builds the transparent-looking, theme-owned text-answer field used by the
-/// React Native renderer.
+/// Builds the soft, theme-owned text field used by every SDK surface: a
+/// neutral wash of the text colour, no resting outline and a primary focus
+/// border. Never inherits the host app's input fill.
 InputDecoration textAnswerDecoration({
   required ResolvedPromptTheme theme,
   required String? hintText,
 }) {
-  final outline = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(12),
-    borderSide: BorderSide(color: theme.border),
-  );
+  OutlineInputBorder outline(Color color) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(theme.fieldRadius),
+        borderSide: BorderSide(color: color, width: 1.5),
+      );
   return InputDecoration(
     hintText: hintText,
-    hintStyle: TextStyle(
-      color: theme.subtext,
-      fontFamily: theme.fontFamily,
+    hintStyle: theme.textStyle(
+      color: surfaceWithOpacity(theme.subtext, 0.8),
+      lineHeight: 22,
     ),
     counterText: '',
-    contentPadding: const EdgeInsets.all(12),
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     filled: true,
-    fillColor: theme.background,
-    border: outline,
-    enabledBorder: outline,
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: theme.primary),
-    ),
+    fillColor: theme.fill,
+    hoverColor: theme.fill,
+    border: outline(Colors.transparent),
+    enabledBorder: outline(Colors.transparent),
+    disabledBorder: outline(Colors.transparent),
+    focusedBorder: outline(theme.primary),
   );
 }

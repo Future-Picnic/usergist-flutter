@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../internal/logger.dart';
 import '../models/inapp_message.dart';
 import '../models/theme.dart';
+import 'inapp_layout.dart';
 import 'theme_resolver.dart';
 import 'modal_coordinator.dart';
 
@@ -151,8 +152,11 @@ class InAppPresenter {
         isScrollControlled: true,
         useSafeArea: true,
         backgroundColor: Colors.transparent,
+        elevation: 0,
+        // The floating card sizes itself; Material 3 would cap the route.
+        constraints: const BoxConstraints(),
         barrierColor: message.backdropEnabled
-            ? Colors.black.withAlpha(102)
+            ? const Color(0x73000000)
             : Colors.transparent,
         builder: (routeContext) => _InAppSurface(
           message: message,
@@ -168,7 +172,7 @@ class InAppPresenter {
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: message.format == 'modal_full' || !message.backdropEnabled
           ? Colors.transparent
-          : Colors.black.withAlpha(102),
+          : const Color(0x73000000),
       transitionDuration: const Duration(milliseconds: 220),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
@@ -259,145 +263,19 @@ class _InAppSurfaceState extends State<_InAppSurface> {
       serverTheme: messageTheme,
       overrides: widget.themeOverrides,
     );
-    final full = widget.presentation == _InAppPresentation.full;
-    final slide = widget.presentation == _InAppPresentation.slideup;
-    final surface = Material(
-      color: theme.background,
-      clipBehavior: Clip.antiAlias,
-      borderRadius: full
-          ? BorderRadius.zero
-          : slide
-              ? BorderRadius.vertical(top: Radius.circular(theme.radius))
-              : BorderRadius.circular(theme.radius),
-      child: SafeArea(
-        top: full,
-        bottom: full || slide,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: full ? double.infinity : 420,
-            maxHeight: MediaQuery.sizeOf(context).height * (full ? 1 : 0.86),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: full ? MainAxisSize.max : MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                if (slide)
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(top: 10),
-                      decoration: BoxDecoration(
-                        color: theme.border,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Semantics(
-                    button: true,
-                    label: 'Close',
-                    excludeSemantics: true,
-                    child: IconButton(
-                      constraints:
-                          const BoxConstraints.tightFor(width: 48, height: 48),
-                      onPressed: () => Navigator.of(context).pop(
-                        const _InAppOutcome.dismissed(),
-                      ),
-                      icon: const Icon(Icons.close),
-                      color: theme.text,
-                    ),
-                  ),
-                ),
-                if (widget.message.imageUrl case final imageUrl?)
-                  Image.network(
-                    imageUrl,
-                    height: full ? 260 : 176,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        widget.message.title,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: theme.text,
-                              fontFamily: theme.fontFamily,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      if (widget.message.body case final body?) ...<Widget>[
-                        const SizedBox(height: 8),
-                        Text(
-                          body,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: theme.subtext,
-                                    fontFamily: theme.fontFamily,
-                                    height: 1.45,
-                                  ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (widget.message.ctas.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: widget.message.ctas.indexed.map((entry) {
-                        final index = entry.$1;
-                        final cta = entry.$2;
-                        final style = index == 0
-                            ? FilledButton.styleFrom(
-                                backgroundColor: theme.primary,
-                                foregroundColor: _contrastOn(theme.primary),
-                                minimumSize: const Size(120, 48),
-                              )
-                            : OutlinedButton.styleFrom(
-                                foregroundColor: theme.primary,
-                                side: BorderSide(color: theme.primary),
-                                minimumSize: const Size(120, 48),
-                              );
-                        return index == 0
-                            ? FilledButton(
-                                style: style,
-                                onPressed: () => Navigator.of(context).pop(
-                                  _InAppOutcome.cta(cta, index),
-                                ),
-                                child: Text(cta.label),
-                              )
-                            : OutlinedButton(
-                                style: style,
-                                onPressed: () => Navigator.of(context).pop(
-                                  _InAppOutcome.cta(cta, index),
-                                ),
-                                child: Text(cta.label),
-                              );
-                      }).toList(growable: false),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+    return InAppMessageLayout(
+      message: widget.message,
+      theme: theme,
+      format: switch (widget.presentation) {
+        _InAppPresentation.full => InAppFormat.full,
+        _InAppPresentation.slideup => InAppFormat.slide,
+        _InAppPresentation.modal => InAppFormat.card,
+      },
+      onClose: () => Navigator.of(context).pop(
+        const _InAppOutcome.dismissed(),
       ),
-    );
-
-    if (full) return SizedBox.expand(child: surface);
-    if (slide) return surface;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: surface,
+      onCta: (cta, index) => Navigator.of(context).pop(
+        _InAppOutcome.cta(cta, index),
       ),
     );
   }
@@ -411,8 +289,4 @@ class _InAppSurfaceState extends State<_InAppSurface> {
     return Color(normalized.length == 6 ? 0xff000000 | parsed : parsed);
   }
 
-  Color _contrastOn(Color color) =>
-      ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-          ? Colors.white
-          : Colors.black;
 }

@@ -3,6 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:usergist_feedback/src/models/prompt.dart';
 import 'package:usergist_feedback/src/models/question.dart';
 import 'package:usergist_feedback/src/ui/prompt_sheet.dart';
+import 'package:usergist_feedback/src/ui/surface_controls.dart';
+
+SurfaceNext nextButton(WidgetTester tester) => tester.widget<SurfaceNext>(
+      find.byKey(const ValueKey<String>('feedback-next')),
+    );
 
 void main() {
   testWidgets('all prompt question types follow the reference flow', (
@@ -75,18 +80,14 @@ void main() {
     expect(find.text('Recommend it?'), findsOneWidget);
     expect(find.text('10'), findsOneWidget);
     expect(find.text('0'), findsOneWidget);
-    final npsDisabled = tester
-        .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
-    expect(npsDisabled.onPressed, isNull);
+    expect(nextButton(tester).disabled, isTrue);
 
     await tester.ensureVisible(find.text('7'));
     await tester.tap(find.text('7'));
     await tester.pump();
     expect(find.text('What led to your score?'), findsOneWidget);
-    final npsEnabled = tester
-        .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
-    expect(npsEnabled.onPressed, isNotNull);
-    await tester.enterText(find.byType(TextFormField), 'Fast and focused');
+    expect(nextButton(tester).disabled, isFalse);
+    await tester.enterText(find.byType(TextField), 'Fast and focused');
     await tester.ensureVisible(find.text('Next'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Next'));
@@ -104,15 +105,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Tell us more'), findsOneWidget);
 
-    final disabled = tester
-        .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
-    expect(disabled.onPressed, isNull);
+    // The last step reads Submit instead of Next.
+    expect(find.text('Next'), findsNothing);
+    expect(nextButton(tester).label, 'Submit');
+    expect(nextButton(tester).disabled, isTrue);
     await tester.enterText(find.byType(TextField), 'Detailed feedback');
     await tester.pump();
-    final enabled = tester
-        .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
-    expect(enabled.onPressed, isNotNull);
-    await tester.tap(find.text('Next'));
+    expect(nextButton(tester).disabled, isFalse);
+    await tester.tap(find.text('Submit'));
     await tester.pumpAndSettle();
 
     expect(outcome?.dismissed, isFalse);

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
+import '../surface_primitives.dart';
 import '../theme_resolver.dart';
 
-/// Widget rendering a [MultipleChoiceQuestion]. Returns either a single
-/// list of selected option ids to the [onChanged] callback.
+/// Widget rendering a [MultipleChoiceQuestion]. Reports the list of selected
+/// option ids to [onChanged].
 class MultipleChoiceQuestionView extends StatefulWidget {
   /// Creates the widget.
   const MultipleChoiceQuestionView({
     required this.question,
     required this.theme,
     required this.onChanged,
+    this.initialValue = const <String>[],
     super.key,
   });
 
@@ -23,6 +25,9 @@ class MultipleChoiceQuestionView extends StatefulWidget {
   /// Callback when the selection changes.
   final ValueChanged<List<String>> onChanged;
 
+  /// Previously selected option ids.
+  final List<String> initialValue;
+
   @override
   State<MultipleChoiceQuestionView> createState() =>
       _MultipleChoiceQuestionViewState();
@@ -30,72 +35,46 @@ class MultipleChoiceQuestionView extends StatefulWidget {
 
 class _MultipleChoiceQuestionViewState
     extends State<MultipleChoiceQuestionView> {
-  final Set<String> _selected = <String>{};
+  late List<String> _selected = List<String>.of(widget.initialValue);
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final question = widget.question;
+    final subtitle = question.subtitle ??
+        (question.multiSelect ? 'Choose all that apply' : null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (final opt in widget.question.options)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Semantics(
-              button: true,
-              selected: _selected.contains(opt.id),
-              label: opt.label,
-              excludeSemantics: true,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _toggle(opt.id),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _selected.contains(opt.id)
-                        ? theme.primary
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: _selected.contains(opt.id)
-                          ? theme.primary
-                          : theme.border,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    opt.label,
-                    style: TextStyle(
-                      color: _selected.contains(opt.id)
-                          ? theme.background
-                          : theme.text,
-                      fontFamily: theme.fontFamily,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+        QuestionHeader(
+          title: question.title,
+          subtitle: subtitle,
+          imageUrl: question.imageUrl,
+          theme: widget.theme,
+        ),
+        for (final (index, opt) in question.options.indexed) ...<Widget>[
+          if (index > 0) const SizedBox(height: 8),
+          ChoiceRow(
+            label: opt.label,
+            selected: _selected.contains(opt.id),
+            kind: question.multiSelect ? ChoiceKind.checkbox : ChoiceKind.radio,
+            onTap: () => _toggle(opt.id),
+            theme: widget.theme,
           ),
+        ],
       ],
     );
   }
 
   void _toggle(String id) {
-    setState(() {
-      if (widget.question.multiSelect) {
-        if (_selected.contains(id)) {
-          _selected.remove(id);
-        } else {
-          _selected.add(id);
-        }
-      } else {
-        _selected
-          ..clear()
-          ..add(id);
-      }
-    });
-    widget.onChanged(_selected.toList(growable: false));
+    final List<String> next;
+    if (widget.question.multiSelect) {
+      next = _selected.contains(id)
+          ? _selected.where((v) => v != id).toList(growable: false)
+          : <String>[..._selected, id];
+    } else {
+      next = <String>[id];
+    }
+    setState(() => _selected = next);
+    widget.onChanged(next);
   }
 }

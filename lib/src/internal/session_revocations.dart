@@ -63,7 +63,8 @@ class SessionRevocations {
           <String, Object?>{'anonymousId': entry['anonymousId']},
           requiresSubject: false,
           subjectTokenOverride: entry['token']! as String);
-      if (!result.success && result.status != 401) return;
+      // A credential rejected for this alias cannot authorize a later retry.
+      if (!result.success && result.status != 401 && result.status != 403) return;
       await _mutate((entries) =>
           entries.where((item) => item['id'] != entry['id']).toList());
     }

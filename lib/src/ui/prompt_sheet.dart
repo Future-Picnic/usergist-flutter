@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -10,6 +11,8 @@ import 'questions/multiple_choice_question.dart';
 import 'questions/nps_question.dart';
 import 'questions/rating_question.dart';
 import 'questions/short_text_question.dart';
+import 'surface_controls.dart';
+import 'surface_tokens.dart';
 import 'theme_resolver.dart';
 
 /// Result emitted by [PromptSheet] back to the presenter.
@@ -27,8 +30,14 @@ class PromptSheetResult {
   final List<ResponseAnswer> answers;
 }
 
-/// The bottom-sheet that renders a [ClientPrompt]. Pops the route
-/// with a [PromptSheetResult] once finished.
+/// The bottom sheet that renders a [ClientPrompt]. Pops the route with a
+/// [PromptSheetResult] once finished.
+///
+/// The sheet background always spans the full screen width with the theme's
+/// top radius. Feedback has no Back, so Close sits at the leading safe edge and
+/// the trailing slot stays empty. Next/Submit is one full-width footer action
+/// outside the scrolling question, above the keyboard, in portrait and
+/// landscape. Question and footer share one centred readable column.
 class PromptSheet extends StatefulWidget {
   /// Creates the sheet.
   const PromptSheet({
@@ -75,166 +84,130 @@ class _PromptSheetState extends State<PromptSheet> {
       return const SizedBox.shrink();
     }
     final current = questions[_index];
-    final media = MediaQuery.of(context);
-    final maxHeight = media.size.height - media.viewPadding.top - 16;
+    final layout = SurfaceLayout.of(context);
+    final landscape = layout.landscape;
+    final keyboardOpen = layout.keyboard > 0;
+    final maxHeight = math.max(
+      0.0,
+      layout.size.height -
+          layout.safe.top -
+          (landscape ? 12 : 16) -
+          layout.keyboard,
+    );
+    final needsNext = _needsExplicitNext(current);
+    final isLast = _index >= questions.length - 1;
+    final next = SurfaceNext(
+      key: const ValueKey<String>('feedback-next'),
+      onPressed: _advance,
+      theme: theme,
+      label: isLast ? 'Submit' : 'Next',
+      disabled: _nextRequiresAnswer(current) &&
+          !_answerHasValue(_answers[current.id]),
+      expand: true,
+    );
+    final bottomInset = keyboardOpen
+        ? 12.0
+        : math.max(layout.safe.bottom, landscape ? 12.0 : 16.0);
     return Padding(
-      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: layout.keyboard),
       child: Container(
-        constraints: BoxConstraints(minHeight: 280, maxHeight: maxHeight),
+        width: double.infinity,
+        constraints: BoxConstraints(maxHeight: maxHeight),
         decoration: BoxDecoration(
           color: theme.background,
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(theme.radius),
           ),
         ),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            (media.viewPadding.bottom > 30 ? media.viewPadding.bottom : 30) +
-                16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _header(theme),
-              const SizedBox(height: 24),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
-                switchInCurve: Curves.easeOutCubic,
-                transitionBuilder: (child, animation) {
-                  final offset = Tween<Offset>(
-                    begin: const Offset(0.1, 0),
-                    end: Offset.zero,
-                  ).animate(animation);
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: offset, child: child),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey<String>(current.id),
-                  child: _questionBlock(current, theme),
+        padding: EdgeInsets.fromLTRB(
+          layout.safe.left + 12,
+          8,
+          layout.safe.right + 12,
+          bottomInset,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            SurfaceHeader(
+              leading: SurfaceClose(
+                key: const ValueKey<String>('feedback-close'),
+                onPressed: _dismiss,
+                color: theme.text,
+              ),
+              center: questions.length > 1
+                  ? Text(
+                      '${_index + 1} of ${questions.length}',
+                      style: theme.textStyle(
+                        color: theme.subtext,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        tabular: true,
+                      ),
+                    )
+                  : null,
+            ),
+            Flexible(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: kSurfaceContentMaxWidth),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Flexible(
+                        child: SingleChildScrollView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                          child: _questionSwitcher(current, theme),
+                        ),
+                      ),
+                      if (needsNext)
+                        Padding(
+                          key: const ValueKey<String>('feedback-footer'),
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                          child: next,
+                        ),
+                    ],
+                  ),
                 ),
               ),
-              if (_needsFooterNext(current)) ...<Widget>[
-                const SizedBox(height: 20),
-                _nextButton(
-                  theme,
-                  enabled: current is! NpsQuestion ||
-                      _answerHasValue(_answers[current.id]),
-                ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _header(ResolvedPromptTheme theme) {
-    return SizedBox(
-      height: 32,
-      child: Stack(
-        clipBehavior: Clip.none,
+  Widget _questionSwitcher(Question current, ResolvedPromptTheme theme) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      layoutBuilder: (currentChild, previous) => Stack(
         alignment: Alignment.topCenter,
         children: <Widget>[
-          Positioned(
-            top: 6,
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: Semantics(
-              button: true,
-              label: 'Close',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _dismiss,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(15),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.close, color: theme.text, size: 18),
-                ),
-              ),
-            ),
-          ),
+          ...previous,
+          if (currentChild != null) currentChild,
         ],
       ),
-    );
-  }
-
-  Widget _questionBlock(Question q, ResolvedPromptTheme theme) {
-    final centered = q is RatingQuestion || q is NpsQuestion;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (q.imageUrl case final imageUrl?) ...<Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(theme.radius),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        Text(
-          q.title,
-          textAlign: centered ? TextAlign.center : TextAlign.start,
-          style: TextStyle(
-            color: theme.text,
-            // Flutter's Android glyph metrics render the same nominal size
-            // smaller than the React Native reference.
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            fontFamily: theme.fontFamily,
-          ),
-        ),
-        if (q.subtitle case final subtitle?
-            when subtitle.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            textAlign: centered ? TextAlign.center : TextAlign.start,
-            style: TextStyle(
-              color: theme.subtext,
-              fontSize: 14,
-              fontFamily: theme.fontFamily,
-            ),
-          ),
-        ],
-        SizedBox(
-          height: _spacingBeforeControl(
-            q,
-            q.subtitle?.isNotEmpty ?? false,
-          ),
-        ),
-        _questionView(q, theme),
-        if (q is ShortTextQuestion) ...<Widget>[
-          const SizedBox(height: 20),
-          _nextButton(theme, enabled: _answerHasValue(_answers[q.id])),
-        ],
-      ],
+      transitionBuilder: (child, animation) {
+        final offset = Tween<Offset>(
+          begin: const Offset(0.08, 0),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<String>(current.id),
+        child: _questionView(current, theme),
+      ),
     );
   }
 
@@ -258,9 +231,11 @@ class _PromptSheetState extends State<PromptSheet> {
       );
     }
     if (q is MultipleChoiceQuestion) {
+      final saved = _answers[q.id];
       return MultipleChoiceQuestionView(
         question: q,
         theme: theme,
+        initialValue: saved is List<String> ? saved : const <String>[],
         onChanged: (v) => _setAnswer(q, v),
       );
     }
@@ -268,51 +243,33 @@ class _PromptSheetState extends State<PromptSheet> {
       return ShortTextQuestionView(
         question: q,
         theme: theme,
+        initialValue: _answers[q.id] as String? ?? '',
         onChanged: (v) => _setAnswer(q, v),
       );
     }
+    // Unknown/newer question type: render nothing rather than failing.
     return const SizedBox.shrink();
   }
 
-  Widget _nextButton(
-    ResolvedPromptTheme theme, {
-    required bool enabled,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: theme.primary,
-          disabledBackgroundColor: theme.primary.withAlpha(102),
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(52),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: const StadiumBorder(),
-          elevation: 0,
-        ),
-        onPressed: enabled ? _advance : null,
-        child: Text(
-          'Next',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            fontFamily: theme.fontFamily,
-          ),
-        ),
-      ),
-    );
-  }
+  bool _hasNpsFollowUp(Question q) =>
+      q is NpsQuestion && q.followUp?.isNotEmpty == true;
 
+  /// Tap selections advance immediately unless the question has more input.
   bool _shouldAutoAdvance(Question q) {
     if (q is RatingQuestion) return true;
-    if (q is NpsQuestion) return q.followUp?.isNotEmpty != true;
+    if (q is NpsQuestion) return !_hasNpsFollowUp(q);
     return q is MultipleChoiceQuestion && !q.multiSelect;
   }
 
-  bool _needsFooterNext(Question q) =>
-      (q is MultipleChoiceQuestion && q.multiSelect) ||
-      (q is NpsQuestion && q.followUp?.isNotEmpty == true);
+  /// Questions that need a deliberate Next/Submit after answering.
+  bool _needsExplicitNext(Question q) =>
+      q is ShortTextQuestion ||
+      _hasNpsFollowUp(q) ||
+      (q is MultipleChoiceQuestion && q.multiSelect);
+
+  /// Explicit Next is gated when its question first requires an answer.
+  bool _nextRequiresAnswer(Question q) =>
+      q is ShortTextQuestion || _hasNpsFollowUp(q);
 
   bool _answerHasValue(Object? value) {
     if (value == null) return false;
@@ -372,12 +329,5 @@ class _PromptSheetState extends State<PromptSheet> {
         answers: answers,
       ),
     );
-  }
-
-  double _spacingBeforeControl(Question question, bool hasSubtitle) {
-    if (question is RatingQuestion) return hasSubtitle ? 24 : 12;
-    if (question is NpsQuestion) return hasSubtitle ? 24 : 16;
-    if (question is MultipleChoiceQuestion) return hasSubtitle ? 16 : 12;
-    return hasSubtitle ? 12 : 4;
   }
 }

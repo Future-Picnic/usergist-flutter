@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:usergist_feedback/src/models/question.dart';
 import 'package:usergist_feedback/src/ui/questions/short_text_question.dart';
+import 'package:usergist_feedback/src/ui/surface_tokens.dart';
 import 'package:usergist_feedback/src/ui/theme_resolver.dart';
 
 void main() {
@@ -43,12 +44,14 @@ void main() {
 
     final input = tester.widget<TextField>(find.byType(TextField));
     expect(input.decoration?.filled, isTrue);
-    expect(input.decoration?.fillColor, theme.background);
+    // Soft field: a neutral wash of the theme text colour, never the host
+    // fill and never a fixed light grey (stays legible on dark themes).
+    expect(input.decoration?.fillColor, theme.fill);
     expect(input.decoration?.counterText, isEmpty);
     expect(input.cursorColor, theme.primary);
     expect(
       (input.decoration?.enabledBorder as OutlineInputBorder).borderSide.color,
-      theme.border,
+      Colors.transparent,
     );
     expect(
       (input.decoration?.focusedBorder as OutlineInputBorder).borderSide.color,

@@ -118,7 +118,11 @@ class PromptPresenter {
           isScrollControlled: true,
           enableDrag: false,
           backgroundColor: Colors.transparent,
-          barrierColor: Colors.black.withAlpha(102),
+          elevation: 0,
+          // The sheet background spans the full screen width in every
+          // orientation; Material 3 would otherwise cap it at 640.
+          constraints: const BoxConstraints(),
+          barrierColor: const Color(0x73000000),
           builder: (_) => PromptSheet(
             prompt: req.prompt,
             themeOverrides: themeOverrides,

@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
-import '../text_answer_decoration.dart';
+import '../surface_primitives.dart';
+import '../surface_tokens.dart';
 import '../theme_resolver.dart';
 
+/// Content width at which the 0–10 row replaces the vertical list. Measured
+/// on the question's own layout width (not the window), so a narrow column
+/// inside a wide screen keeps the vertical list.
+const double kNpsWideBreakpoint = 524;
+
 /// Widget rendering an [NpsQuestion] (0..10 scale).
+///
+/// - Wide layouts (landscape, tablets): the familiar 0–10 row with endpoint
+///   labels underneath; every numeral, including 10, is centred in its cell.
+/// - Narrow portrait: a compact vertical list, 10 at the top, so no number is
+///   squeezed below a usable touch target.
 class NpsQuestionView extends StatefulWidget {
   /// Creates the widget.
   const NpsQuestionView({
@@ -40,107 +51,181 @@ class NpsQuestionView extends StatefulWidget {
 }
 
 class _NpsQuestionViewState extends State<NpsQuestionView> {
+  late final TextEditingController _followUp =
+      TextEditingController(text: widget.followUp);
+
   @override
-  Widget build(BuildContext context) {
+  void dispose() {
+    _followUp.dispose();
+    super.dispose();
+  }
+
+  String get _low => widget.question.lowLabel ?? 'Not at all likely';
+  String get _high => widget.question.highLabel ?? 'Extremely likely';
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => _build(
+          constraints.hasBoundedWidth &&
+              constraints.maxWidth >= kNpsWideBreakpoint,
+        ),
+      );
+
+  Widget _build(bool wide) {
     final theme = widget.theme;
+    final question = widget.question;
+    final followUpTitle = question.followUp;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (var value = 10; value >= 0; value--)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _scoreRow(value, theme),
-          ),
+        QuestionHeader(
+          title: question.title,
+          subtitle: question.subtitle,
+          imageUrl: question.imageUrl,
+          theme: theme,
+          center: wide,
+        ),
+        if (wide) ..._wideRow(theme) else ..._tallList(theme),
         if (widget.score != null &&
-            widget.question.followUp?.isNotEmpty == true) ...<Widget>[
-          const SizedBox(height: 8),
+            followUpTitle != null &&
+            followUpTitle.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 24),
           Text(
-            widget.question.followUp!,
-            textAlign: TextAlign.center,
-            style: TextStyle(
+            followUpTitle,
+            style: theme.textStyle(
               color: theme.text,
-              fontSize: 14,
-              fontFamily: theme.fontFamily,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: widget.followUp,
+          const SizedBox(height: 10),
+          SurfaceField(
+            theme: theme,
+            controller: _followUp,
             onChanged: widget.onFollowUp,
-            minLines: 3,
-            maxLines: 5,
-            cursorColor: theme.primary,
-            decoration: _inputDecoration(theme),
-            style: TextStyle(color: theme.text, fontFamily: theme.fontFamily),
+            hintText: 'Tell us more',
+            multiline: true,
+            minHeight: 80,
+            semanticsLabel: followUpTitle,
           ),
         ],
       ],
     );
   }
 
-  Widget _scoreRow(int value, ResolvedPromptTheme theme) {
-    final selected = widget.score == value;
-    final endpointLabel = value == 10
-        ? widget.question.highLabel ?? 'Extremely likely'
-        : value == 0
-            ? widget.question.lowLabel ?? 'Not at all likely'
-            : null;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: 'Score $value',
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onScore(value),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? theme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? theme.primary : theme.border,
-            ),
-          ),
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: 24,
-                child: Text(
-                  '$value',
-                  style: TextStyle(
-                    color: selected ? theme.background : theme.text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: theme.fontFamily,
-                  ),
-                ),
-              ),
-              if (endpointLabel != null) ...<Widget>[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    endpointLabel,
-                    style: TextStyle(
-                      color: selected ? theme.background : theme.subtext,
-                      fontSize: 13,
-                      fontFamily: theme.fontFamily,
-                    ),
-                  ),
-                ),
-              ],
+  List<Widget> _wideRow(ResolvedPromptTheme theme) => <Widget>[
+        Row(
+          children: <Widget>[
+            for (var n = 0; n <= 10; n++) ...<Widget>[
+              if (n > 0) const SizedBox(width: 6),
+              Expanded(child: _cell(n, theme, wide: true)),
             ],
-          ),
+          ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: <Widget>[
+            Expanded(child: _endLabel(_low, TextAlign.start, theme)),
+            const SizedBox(width: 16),
+            Expanded(child: _endLabel(_high, TextAlign.end, theme)),
+          ],
+        ),
+      ];
+
+  List<Widget> _tallList(ResolvedPromptTheme theme) => <Widget>[
+        for (var n = 10; n >= 0; n--) ...<Widget>[
+          if (n < 10) const SizedBox(height: 6),
+          _cell(n, theme, wide: false),
+        ],
+      ];
+
+  Widget _endLabel(String text, TextAlign align, ResolvedPromptTheme theme) =>
+      Text(
+        text,
+        textAlign: align,
+        style: theme.textStyle(color: theme.subtext, fontSize: 13),
+      );
+
+  Widget _cell(int n, ResolvedPromptTheme theme, {required bool wide}) {
+    final selected = widget.score == n;
+    final endpoint = wide
+        ? null
+        : n == 10
+            ? _high
+            : n == 0
+                ? _low
+                : null;
+    final radius = BorderRadius.circular(theme.cellRadius);
+    final number = Text(
+      '$n',
+      textAlign: TextAlign.center,
+      style: theme.textStyle(
+        color: selected ? theme.onPrimary : theme.text,
+        fontWeight: FontWeight.w700,
+        tabular: true,
       ),
     );
-  }
-
-  InputDecoration _inputDecoration(ResolvedPromptTheme theme) {
-    return textAnswerDecoration(
-      theme: theme,
-      hintText: 'Tell us more...',
+    final content = wide
+        ? SizedBox(height: 48, child: Center(child: number))
+        : ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: <Widget>[
+                  // A fixed number column keeps endpoint labels aligned.
+                  SizedBox(
+                    width: 22,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: number,
+                    ),
+                  ),
+                  if (endpoint != null) ...<Widget>[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        endpoint,
+                        style: theme.textStyle(
+                          color: selected ? theme.onPrimary : theme.subtext,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+    final suffix = n == 10
+        ? ', $_high'
+        : n == 0
+            ? ', $_low'
+            : '';
+    return Semantics(
+      button: true,
+      inMutuallyExclusiveGroup: true,
+      selected: selected,
+      label: 'Score $n$suffix',
+      container: true,
+      excludeSemantics: true,
+      onTap: () => widget.onScore(n),
+      child: Material(
+        color: selected ? theme.primary : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: selected ? theme.primary : theme.border,
+            width: 1.5,
+          ),
+        ),
+        child: InkWell(
+          onTap: () => widget.onScore(n),
+          borderRadius: radius,
+          highlightColor: theme.fill,
+          splashColor: theme.fill,
+          child: content,
+        ),
+      ),
     );
   }
 }

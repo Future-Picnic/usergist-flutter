@@ -34,6 +34,7 @@ import 'storage.dart';
 import 'survey_store.dart';
 import 'transport/api_client.dart';
 import 'transport/endpoints.dart';
+import 'transport/native_ingest.dart';
 import 'transport/retry_policy.dart';
 import 'uid.dart';
 import 'triggers/frequency_cap.dart';
@@ -60,15 +61,19 @@ class UserGistCore {
     this.onSurveyInvite,
     ApiClient? apiClient,
     PresentationGate? presentationGate,
+    Future<DeviceContextSnapshot> Function()? deviceContextCollector,
   })  : _providedApiClient = apiClient,
+        _deviceContextCollector = deviceContextCollector ?? collectDeviceContext,
         presentationGate = presentationGate ?? PresentationGate();
 
   final PresentationGate presentationGate;
   final ApiClient? _providedApiClient;
+  final Future<DeviceContextSnapshot> Function() _deviceContextCollector;
   bool _disposed = false;
   Map<String, Object?>? _pushRegistration;
   String? _pushRegistrationKey;
   String? _pushRegistrationAttempt;
+  bool _pushPermissionGranted = true;
   Future<void> _pushWork = Future<void>.value();
   Future<void> _serializePush(Future<void> Function() operation) {
     final generation = _resetGeneration;
@@ -84,10 +89,10 @@ class UserGistCore {
   DateTime _pushRegisteredAt = DateTime.fromMillisecondsSinceEpoch(0);
   void Function(PushSubscriptionState)? onPushSubscriptionState;
   String _pushOwnerKey(String token) =>
-      '${identity.anonymousId}:${identity.externalId ?? ''}:$token';
+      '${identity.anonymousId}:${identity.externalId ?? ''}:$token:${_appVersion ?? ''}';
   void notifyPushSubscription() {
     final token = _pushRegistration?['token'] as String?;
-    final optedIn = _consent.isPushGranted && !_resetInProgress;
+    final optedIn = _consent.isPushGranted && !_resetInProgress && _pushPermissionGranted;
     try {
       onPushSubscriptionState?.call(PushSubscriptionState(
           tokenAvailable: token != null,
@@ -209,7 +214,9 @@ class UserGistCore {
   final RequestsCache requestsCache = RequestsCache();
 
   /// HTTP helper for the Feature Requests pillar. Initialised in `start()`.
-  RequestsApi get requestsApi => RequestsApi(_api);
+  RequestsApi get requestsApi => RequestsApi(_api,
+      canRead: () => consent.allowsTransport,
+      canWrite: () => consent.feedback == true);
 
   final StreamController<PromptShowRequest> _showCtrl =
       StreamController<PromptShowRequest>.broadcast();
@@ -236,6 +243,7 @@ class UserGistCore {
   Map<String, Object?> _identityProperties = <String, Object?>{};
 
   String? _appVersion;
+  String? _screenName;
   String? _locale;
   String? _timezone;
   String? _osName;
@@ -496,6 +504,15 @@ class UserGistCore {
         : IdentifyResult.synced;
   }
 
+  /// Updates the screen context used by server and local display gates.
+  void setScreenName(String? name) {
+    final trimmed = name?.trim() ?? '';
+    _screenName = trimmed.isEmpty
+        ? null
+        : trimmed.substring(0, trimmed.length > 120 ? 120 : trimmed.length);
+    _runAsync(pollInstructions(), 'screen context refresh');
+  }
+
   /// Tracks an event.
   void track(
     String name,
@@ -503,6 +520,9 @@ class UserGistCore {
     EventPurpose purpose = EventPurpose.analytics,
   }) {
     if (_resetInProgress) return;
+    if (purpose == EventPurpose.analytics
+        ? !_consent.isAnalyticsGranted
+        : !_consent.isFeedbackGranted) return;
     if (name.isEmpty) {
       throw ArgumentError('track requires a non-empty event name');
     }
@@ -519,6 +539,7 @@ class UserGistCore {
       sessionId: _sessionId,
       sdkVersion: sdkVersion,
       appVersion: _appVersion,
+      platform: _nativePlatform,
     );
     _runAsync(_queue.append(event), 'event persistence');
     _recordLocalEvent(name, now);
@@ -567,6 +588,13 @@ class UserGistCore {
   }
 
   /// Registers a device token with the control plane. Consent-gated on push.
+  /// Host-reported OS permission; Flutter hosts own the native push plumbing.
+  Future<void> setPushPermissionGranted(bool granted, {bool retry = true}) async {
+    _pushPermissionGranted = granted;
+    notifyPushSubscription();
+    if (retry) await _retryPushRegistration();
+  }
+
   Future<void> registerPushToken(
     String token,
     String platform,
@@ -591,15 +619,27 @@ class UserGistCore {
             'push.registration', jsonEncode(desired))) return;
     if (_resetInProgress || generation != _resetGeneration) return;
     _pushRegistration = desired;
-    if (!_consent.isPushGranted) {
-      notifyPushSubscription();
-      return;
-    }
     await _revocations.drain();
     if (await _revocations.isPending() ||
         _resetInProgress ||
         generation != _resetGeneration) return;
     final key = _pushOwnerKey(token);
+    if (!_pushPermissionGranted || !_consent.isPushGranted) {
+      final deniedKey = 'denied:$key';
+      if (_pushRegistrationKey != deniedKey) {
+        _pushRegistrationKey = null;
+        _lastPushToken = null;
+        notifyPushSubscription();
+        final result = await _api.postJson(SdkEndpoints.pushInvalidateToken,
+            <String, Object?>{'anonymousId': identity.anonymousId, 'token': token});
+        if (result.success && !_resetInProgress && generation == _resetGeneration &&
+            key == _pushOwnerKey(token) && (!_pushPermissionGranted || !_consent.isPushGranted)) {
+          _pushRegistrationKey = deniedKey;
+        }
+      }
+      notifyPushSubscription();
+      return;
+    }
     if (_pushRegistrationAttempt != null ||
         (_pushRegistrationKey == key &&
             DateTime.now().difference(_pushRegisteredAt).inHours < 24)) return;
@@ -617,12 +657,14 @@ class UserGistCore {
           'timezone': DateTime.now().timeZoneName,
           'sdkVersion': sdkVersion,
           'optIn': true,
+          'appVersion': _appVersion,
         },
       );
       if (_resetInProgress ||
           generation != _resetGeneration ||
           key != _pushOwnerKey(token) ||
           _pushRegistration?['token'] != token ||
+          !_pushPermissionGranted ||
           !_consent.isPushGranted) return;
       if (result.success && result.data?['registered'] == true) {
         _lastPushToken = token;
@@ -818,7 +860,7 @@ class UserGistCore {
         'resume': true,
         'sdkVersion': sdkVersion,
         'appVersion': _appVersion,
-        'platform': 'flutter',
+        'platform': _nativePlatform,
       },
     );
     if (!attemptResult.success || attemptResult.data == null) {
@@ -1014,13 +1056,10 @@ class UserGistCore {
                   event.anonymousId == first.anonymousId &&
                   event.externalId == first.externalId,
             )
-            .take(flushBatchSize)
+            .take(flushBatchSize > 20 ? 20 : flushBatchSize)
             .toList(growable: false);
         if (batch.isEmpty) break;
-        final payload = <String, Object?>{
-          'events': batch.map((e) => e.toWireJson()).toList(growable: false),
-          'context': _contextFor(first).toJson(),
-        };
+        final payload = nativeIngestPayload(batch, _contextFor(first));
         final res = await _api.postJson(SdkEndpoints.ingest, payload);
         if (!res.success) {
           final permanent = res.status != null &&
@@ -1036,10 +1075,7 @@ class UserGistCore {
             }
             final single = await _api.postJson(
               SdkEndpoints.ingest,
-              <String, Object?>{
-                'events': <Object?>[first.toWireJson()],
-                'context': _contextFor(first).toJson(),
-              },
+              nativeIngestPayload(<IngestEvent>[first], _contextFor(first)),
             );
             if (single.success ||
                 (single.status != null &&
@@ -1104,7 +1140,9 @@ class UserGistCore {
           'protocolVersion': '2',
           'platform': Platform.isIOS ? 'ios' : 'android',
           'anonymousId': identity.anonymousId,
-          'sdkVersion': sdkVersion
+          if (_screenName != null) 'screenName': _screenName!,
+          'sdkVersion': sdkVersion,
+          if (_appVersion != null) 'appVersion': _appVersion!,
         },
       );
       if (!result.success) return;
@@ -1214,6 +1252,12 @@ class UserGistCore {
       try {
         final message = ArmedInAppMessage.fromJson(rawMessage);
         if (message.messageId.isEmpty || message.title.isEmpty) return;
+        final screen = _screenName ?? '';
+        if ((message.screenAllowlist.isNotEmpty &&
+                !message.screenAllowlist.contains(screen)) ||
+            message.screenDenylist.contains(screen)) {
+          return;
+        }
         final triggerEventId = payload['triggerEventId'];
         if (triggerEventId is String &&
             _localInstructionDedupe.consume(
@@ -1225,8 +1269,13 @@ class UserGistCore {
             )) {
           return;
         }
-        _emitInApp(InAppShowRequest(
-            message: message, isValid: presentationGate.validator('feedback')));
+        final consentValid = presentationGate.validator('feedback');
+        _emitInApp(InAppShowRequest(message: message, isValid: () {
+          final currentScreen = _screenName ?? '';
+          return consentValid() &&
+              (message.screenAllowlist.isEmpty || message.screenAllowlist.contains(currentScreen)) &&
+              !message.screenDenylist.contains(currentScreen);
+        }));
       } on Object catch (err, st) {
         log.e('invalid inapp.show instruction', err, st);
       }
@@ -1316,6 +1365,9 @@ class UserGistCore {
       'answers': info.answers.map((a) => a.toJson()).toList(growable: false),
       'dismissed': info.dismissed,
       'latencyMs': info.latencyMs,
+      'platform': _nativePlatform,
+      'sdkVersion': sdkVersion,
+      if (_appVersion != null) 'appVersion': _appVersion,
     };
     unawaited(
       _mutations
@@ -1618,10 +1670,20 @@ class UserGistCore {
     return rejected;
   }
 
+  // Targeting and delivery select an operating system, independently of the
+  // framework. Native OS detection still works if a context plugin is absent.
+  String get _nativePlatform {
+    if (Platform.isAndroid) return 'android';
+    if (Platform.isIOS) return 'ios';
+    if (_osName == 'android' || _osName == 'ios') return _osName!;
+    return 'flutter';
+  }
+
   IngestContext _contextFor(IngestEvent event) => IngestContext(
         anonymousId: event.anonymousId,
         externalId: event.externalId,
         sdkVersion: sdkVersion,
+        platform: _nativePlatform,
         appVersion: _appVersion,
         locale: _locale,
         timezone: _timezone,
@@ -1876,13 +1938,26 @@ class UserGistCore {
   }
 
   Future<void> _collectContext() async {
-    final snap = await collectDeviceContext();
+    final snap = await _deviceContextCollector();
     _appVersion = snap.appVersion;
     _locale = snap.locale;
     _timezone = snap.timezone;
     _osName = snap.osName;
     _osVersion = snap.osVersion;
     _deviceModel = snap.deviceModel;
+    final current = _appVersion;
+    if (current == null || current.isEmpty || _disposed) return;
+    final previous = await _kv.readString('lifecycle.appVersion');
+    // Match RN/Swift: advance the baseline while denied, without replay on grant.
+    if (!await _kv.writeStringStrict('lifecycle.appVersion', current)) return;
+    if (previous == null || previous.isEmpty || previous == current ||
+        !_consent.isAnalyticsGranted || _disposed) {
+      return;
+    }
+    track(r'$app_version_changed', <String, Object?>{
+      'old_version': previous,
+      'new_version': current,
+    });
   }
 
   String _newSessionId() =>

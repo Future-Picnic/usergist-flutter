@@ -11,7 +11,7 @@ and React Native SDKs.
 
 ```yaml
 dependencies:
-  usergist_feedback: ^0.2.0
+  usergist_feedback: ^0.2.1
 ```
 
 Initialization finishes after local storage is hydrated. Session and mutation
@@ -99,6 +99,14 @@ marks them client-side eligible. All SDK-owned routes share one modal FIFO.
 ## Public API
 
 See `lib/src/usergist.dart`.
+
+Read `UserGist.getConsent()` after `await UserGist.init(...)` to restore the
+host's controls without replacing a saved opt-out. Null purposes are undecided.
+Because the host owns native messaging, call
+`await UserGist.setPushPermissionGranted(granted)` with its current OS permission
+before SDK initialization, after permission changes, and on app resume. A denied
+permission invalidates the server binding while retaining the local descriptor
+for regrant; it does not change the user's separate SDK consent choice.
 
 Push token lifecycle, silent acks, beacons, channel preferences, and host-
 forwarded receive/open/action/dismiss callbacks are implemented. Flutter apps

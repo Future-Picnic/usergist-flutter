@@ -44,15 +44,19 @@ class FlutterRequestBranding {
 }
 
 class RequestsApi {
-  RequestsApi(this._api);
+  RequestsApi(this._api, {required bool Function() canRead, required bool Function() canWrite})
+      : _canRead = canRead, _canWrite = canWrite;
 
   final ApiClient _api;
+  final bool Function() _canRead;
+  final bool Function() _canWrite;
 
   Future<GetRequestsResult> list({
     required String anonymousId,
     String? externalId,
     GetRequestsOptions options = const GetRequestsOptions(),
   }) async {
+    if (!_canRead()) return const GetRequestsResult(items: [], nextCursor: null);
     final query = <String, String>{
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
@@ -84,6 +88,7 @@ class RequestsApi {
     required String anonymousId,
     String? externalId,
   }) async {
+    if (!_canRead()) return null;
     final query = <String, String>{
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
@@ -100,6 +105,7 @@ class RequestsApi {
     required String title,
     required String description,
   }) async {
+    if (!_canWrite()) return null;
     final body = <String, Object?>{
       'idempotencyKey': newUuid(),
       'anonymousId': anonymousId,
@@ -118,6 +124,7 @@ class RequestsApi {
     String? externalId,
     required bool vote,
   }) async {
+    if (!_canWrite()) return null;
     final body = <String, Object?>{
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
@@ -141,6 +148,7 @@ class RequestsApi {
     String? externalId,
     required bool follow,
   }) async {
+    if (!_canWrite()) return null;
     final body = <String, Object?>{
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
@@ -168,6 +176,7 @@ class RequestsApi {
     required String anonymousId,
     String? externalId,
   }) async {
+    if (!_canRead()) return const [];
     final query = <String, String>{
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
@@ -190,6 +199,7 @@ class RequestsApi {
     String? externalId,
     required String body,
   }) async {
+    if (!_canWrite()) return null;
     final payload = <String, Object?>{
       'idempotencyKey': newUuid(),
       'anonymousId': anonymousId,
@@ -208,6 +218,7 @@ class RequestsApi {
     required String anonymousId,
     required String body,
   }) async {
+    if (!_canWrite()) return null;
     final payload = <String, Object?>{'anonymousId': anonymousId, 'body': body};
     final res = await _api.patchJson(
       SdkEndpoints.requestComment(requestId, commentId),
@@ -222,6 +233,7 @@ class RequestsApi {
     required String commentId,
     required String anonymousId,
   }) async {
+    if (!_canWrite()) return false;
     final res = await _api.deleteJson(
       SdkEndpoints.requestComment(requestId, commentId),
       query: {'anonymousId': anonymousId},
@@ -230,6 +242,7 @@ class RequestsApi {
   }
 
   Future<FlutterRequestBranding?> getBranding() async {
+    if (!_canRead()) return null;
     final res = await _api.getJson(SdkEndpoints.requestBranding);
     if (!res.success || res.data == null) return null;
     final m = res.data!;

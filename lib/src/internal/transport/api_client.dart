@@ -79,6 +79,7 @@ class ApiClient {
         'authorization': 'Bearer $writeKey',
         'x-usergist-sdk-version': 'flutter/$sdkVersion',
         'x-usergist-platform': 'flutter',
+        'x-usergist-capabilities': 'push.json-open.v1',
         if (subjectTokenOverride ?? _subjectToken case final token?)
           'x-usergist-subject-token': token,
       };

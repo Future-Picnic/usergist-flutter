@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:usergist_feedback/src/models/survey.dart';
+import 'package:usergist_feedback/src/ui/surface_tokens.dart';
 import 'package:usergist_feedback/src/ui/survey_rating_input.dart';
 import 'package:usergist_feedback/src/ui/theme_resolver.dart';
 
@@ -64,7 +65,8 @@ void main() {
       stars.take(4).every((star) => star.style?.color == theme.primary),
       isTrue,
     );
-    expect(stars.last.style?.color, theme.border);
+    // Unselected stars use a quiet wash of the text colour, not a fixed grey.
+    expect(stars.last.style?.color, theme.quietOutline);
   });
 }
 

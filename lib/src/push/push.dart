@@ -26,6 +26,7 @@ class UserGistPushMessage {
     this.title,
     this.body,
     this.actionButtons = const <PushActionButton>[],
+    this.openAction,
   });
 
   final String? campaignId;
@@ -36,6 +37,7 @@ class UserGistPushMessage {
   final String? title;
   final String? body;
   final List<PushActionButton> actionButtons;
+  final PushOpenAction? openAction;
 
   static UserGistPushMessage? parseIos(Map<String, Object?> userInfo) {
     final usergist = userInfo['usergist'];
@@ -55,6 +57,7 @@ class UserGistPushMessage {
       title: alert?['title'] as String?,
       body: alert?['body'] as String?,
       actionButtons: PushActionButton.parseList(usergistMap['actionButtons']),
+      openAction: PushOpenAction.parse(usergistMap['openAction']),
     );
   }
 
@@ -74,6 +77,41 @@ class UserGistPushMessage {
       title: title,
       body: body,
       actionButtons: PushActionButton.parseList(data['usergist_actions']),
+      openAction: PushOpenAction.parse(data['usergist_open_action']),
+    );
+  }
+}
+
+/// Action configured for tapping the notification itself.
+class PushOpenAction {
+  const PushOpenAction({required this.action, this.target, this.actionJson});
+
+  final String action;
+  final String? target;
+  final Map<String, Object?>? actionJson;
+
+  static PushOpenAction? parse(Object? value) {
+    Object? candidate = value;
+    if (candidate is String) {
+      try {
+        candidate = jsonDecode(candidate);
+      } on FormatException {
+        return null;
+      }
+    }
+    if (candidate is! Map || candidate.keys.any((key) => key is! String)) {
+      return null;
+    }
+    final action = candidate['action'];
+    final json = candidate['actionJson'];
+    if (action is! String ||
+        (json != null && (json is! Map || json.keys.any((key) => key is! String)))) {
+      return null;
+    }
+    return PushOpenAction(
+      action: action,
+      target: candidate['target'] is String ? candidate['target'] as String : null,
+      actionJson: json is Map ? Map<String, Object?>.from(json) : null,
     );
   }
 }
@@ -375,7 +413,18 @@ class Push {
         },
       );
       dispatchSdkEvent('\$push_opened', _eventProperties(msg));
-      _handlers.onOpen?.call(msg);
+      try {
+        _handlers.onOpen?.call(msg);
+      } on Object {
+        // An observer cannot prevent the configured action.
+      }
+      if (msg.openAction?.action == 'json' && msg.openAction?.actionJson != null) {
+        try {
+          _handlers.onJsonAction?.call(msg.openAction!.actionJson!, msg, 'usergist_default');
+        } on Object {
+          // Host callbacks must not escape the SDK boundary.
+        }
+      }
     }
   }
 

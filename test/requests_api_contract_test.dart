@@ -29,7 +29,7 @@ void main() {
       sdkVersion: '0.1.4',
       httpClient: mock,
     )..setSubjectToken('st_test');
-    final api = RequestsApi(client);
+    final api = RequestsApi(client, canRead: () => true, canWrite: () => true);
 
     expect(
       await api.submit(

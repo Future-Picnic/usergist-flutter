@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
-import '../text_answer_decoration.dart';
+import '../surface_primitives.dart';
 import '../theme_resolver.dart';
 
 /// Widget rendering a [ShortTextQuestion].
@@ -11,6 +11,8 @@ class ShortTextQuestionView extends StatefulWidget {
     required this.question,
     required this.theme,
     required this.onChanged,
+    this.initialValue = '',
+    this.minHeight = 96,
     super.key,
   });
 
@@ -23,12 +25,19 @@ class ShortTextQuestionView extends StatefulWidget {
   /// Callback when the text changes.
   final ValueChanged<String> onChanged;
 
+  /// Text restored when the question is shown again.
+  final String initialValue;
+
+  /// Minimum field height.
+  final double minHeight;
+
   @override
   State<ShortTextQuestionView> createState() => _ShortTextQuestionViewState();
 }
 
 class _ShortTextQuestionViewState extends State<ShortTextQuestionView> {
-  final TextEditingController _ctrl = TextEditingController();
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.initialValue);
 
   @override
   void dispose() {
@@ -38,22 +47,27 @@ class _ShortTextQuestionViewState extends State<ShortTextQuestionView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
-    return TextField(
-      controller: _ctrl,
-      onChanged: widget.onChanged,
-      maxLength: widget.question.maxLength,
-      maxLines: 6,
-      minLines: 4,
-      cursorColor: theme.primary,
-      style: TextStyle(
-        color: theme.text,
-        fontFamily: theme.fontFamily,
-      ),
-      decoration: textAnswerDecoration(
-        theme: theme,
-        hintText: widget.question.placeholder,
-      ),
+    final question = widget.question;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        QuestionHeader(
+          title: question.title,
+          subtitle: question.subtitle,
+          imageUrl: question.imageUrl,
+          theme: widget.theme,
+        ),
+        SurfaceField(
+          theme: widget.theme,
+          controller: _ctrl,
+          onChanged: widget.onChanged,
+          hintText: question.placeholder,
+          maxLength: question.maxLength,
+          multiline: true,
+          minHeight: widget.minHeight,
+          semanticsLabel: 'Feedback text answer',
+        ),
+      ],
     );
   }
 }

@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
+import '../surface_primitives.dart';
+import '../surface_tokens.dart';
 import '../theme_resolver.dart';
 
-/// Widget rendering a [RatingQuestion].
+/// Widget rendering a [RatingQuestion]. Honours `question.display`:
+///   - stars   → row of star glyphs (default)
+///   - numeric → row of score chips
+///   - emoji   → 5 faces (only valid when scale = 5; falls back to stars)
+///
+/// The row is centred so the dashboard preview and the device match.
 class RatingQuestionView extends StatefulWidget {
   /// Creates the widget.
   const RatingQuestionView({
@@ -33,76 +40,63 @@ class RatingQuestionView extends StatefulWidget {
 class _RatingQuestionViewState extends State<RatingQuestionView> {
   static const _emoji = <String>['😡', '😕', '😐', '🙂', '😍'];
 
-  int? _value;
-
-  @override
-  void initState() {
-    super.initState();
-    _value = widget.initialValue;
-  }
+  late int? _value = widget.initialValue;
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final labels = <String?>[
-      widget.question.lowLabel,
-      widget.question.highLabel,
-    ];
-    final display = widget.question.display == RatingDisplayMode.emoji &&
-            widget.question.scale != 5
-        ? RatingDisplayMode.stars
-        : widget.question.display;
+    final question = widget.question;
+    final display =
+        question.display == RatingDisplayMode.emoji && question.scale != 5
+            ? RatingDisplayMode.stars
+            : question.display;
+    final low = question.lowLabel;
+    final high = question.highLabel;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        QuestionHeader(
+          title: question.title,
+          subtitle: question.subtitle,
+          imageUrl: question.imageUrl,
+          theme: theme,
+          center: true,
+        ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           alignment: WrapAlignment.center,
-          children: List<Widget>.generate(widget.question.scale, (i) {
+          children: List<Widget>.generate(question.scale, (i) {
             final v = i + 1;
             final selected = _value == v;
+            void pick() {
+              setState(() => _value = v);
+              widget.onChanged(v);
+            }
+
             return Semantics(
               button: true,
+              inMutuallyExclusiveGroup: true,
               selected: selected,
               label: 'Rate $v',
+              container: true,
               excludeSemantics: true,
+              onTap: pick,
               child: GestureDetector(
-                onTap: () {
-                  setState(() => _value = v);
-                  widget.onChanged(v);
-                },
-                child: _ratingItem(
-                  value: v,
-                  selected: selected,
-                  display: display,
-                  theme: theme,
-                ),
+                behavior: HitTestBehavior.opaque,
+                onTap: pick,
+                child: _ratingItem(v, selected, display, theme),
               ),
             );
           }),
         ),
-        if (labels[0] != null || labels[1] != null) ...<Widget>[
-          const SizedBox(height: 8),
+        if (low != null || high != null) ...<Widget>[
+          const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Text(
-                labels[0] ?? '',
-                style: TextStyle(
-                  color: theme.subtext,
-                  fontSize: 12,
-                  fontFamily: theme.fontFamily,
-                ),
-              ),
-              Text(
-                labels[1] ?? '',
-                style: TextStyle(
-                  color: theme.subtext,
-                  fontSize: 12,
-                  fontFamily: theme.fontFamily,
-                ),
-              ),
+              Expanded(child: _endLabel(low ?? '', TextAlign.start)),
+              const SizedBox(width: 16),
+              Expanded(child: _endLabel(high ?? '', TextAlign.end)),
             ],
           ),
         ],
@@ -110,64 +104,79 @@ class _RatingQuestionViewState extends State<RatingQuestionView> {
     );
   }
 
-  Widget _ratingItem({
-    required int value,
-    required bool selected,
-    required RatingDisplayMode display,
-    required ResolvedPromptTheme theme,
-  }) {
+  Widget _endLabel(String text, TextAlign align) => Text(
+        text,
+        textAlign: align,
+        style: widget.theme.textStyle(
+          color: widget.theme.subtext,
+          fontSize: 13,
+        ),
+      );
+
+  Widget _ratingItem(
+    int value,
+    bool selected,
+    RatingDisplayMode display,
+    ResolvedPromptTheme theme,
+  ) {
     switch (display) {
       case RatingDisplayMode.stars:
         final filled = _value != null && value <= _value!;
         return SizedBox(
-          width: 36,
-          height: 36,
+          width: 48,
+          height: 48,
           child: Center(
             child: Text(
               '★',
               style: TextStyle(
-                color: filled ? theme.primary : theme.border,
-                // Optical compensation for Flutter's smaller Android star
-                // glyph inside the same 36px target used by React Native.
-                fontSize: 32,
+                color: filled ? theme.primary : theme.quietOutline,
+                // Flutter's star glyph renders smaller than iOS at the same
+                // nominal size; 36 matches the RN 34pt reference optically.
+                fontSize: 36,
                 height: 1,
               ),
             ),
           ),
         );
       case RatingDisplayMode.emoji:
-        return Opacity(
-          opacity: _value == null || selected ? 1 : 0.35,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Center(
-              child: Text(
-                _emoji[value - 1],
-                style: const TextStyle(fontSize: 30, height: 1.2),
-              ),
+        return AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: _value == null || selected ? 1 : 0.4,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: selected ? theme.tint : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _emoji[value - 1],
+              style: const TextStyle(fontSize: 30, height: 1.2),
             ),
           ),
         );
       case RatingDisplayMode.numeric:
         return Container(
-          constraints: const BoxConstraints(minWidth: 40),
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          constraints: const BoxConstraints(minWidth: 48),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? theme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(theme.cellRadius),
             border: Border.all(
-              color: theme.border,
+              color: selected ? theme.primary : theme.border,
+              width: 1.5,
             ),
           ),
           child: Text(
             '$value',
-            style: TextStyle(
-              color: selected ? theme.background : theme.text,
-              fontWeight: FontWeight.w600,
-              fontFamily: theme.fontFamily,
+            textAlign: TextAlign.center,
+            style: theme.textStyle(
+              color: selected ? theme.onPrimary : theme.text,
+              fontWeight: FontWeight.w700,
+              tabular: true,
             ),
           ),
         );
