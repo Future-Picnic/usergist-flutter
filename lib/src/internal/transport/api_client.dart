@@ -1,0 +1,185 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../json.dart';
+import '../logger.dart';
+import 'retry_policy.dart';
+
+/// A single HTTP call's outcome.
+class ApiResult<T> {
+  /// Creates a result.
+  const ApiResult({required this.success, this.data, this.error, this.status});
+
+  /// `true` if the request succeeded (2xx) and decoding worked.
+  final bool success;
+
+  /// Decoded response payload.
+  final T? data;
+
+  /// Human-readable error message when [success] is `false`.
+  final String? error;
+
+  /// HTTP status of the final attempt, if one was made.
+  final int? status;
+}
+
+/// Minimal API client used by the SDK. Batches-of-events go here, plus
+/// identify / consent / responses / armed-triggers calls.
+class ApiClient {
+  /// Creates an API client.
+  ApiClient({
+    required this.baseUrl,
+    required this.writeKey,
+    required this.sdkVersion,
+    http.Client? httpClient,
+    RetryPolicy? retryPolicy,
+  })  : _http = httpClient ?? http.Client(),
+        _retry = retryPolicy ?? RetryPolicy();
+
+  /// Base URL (no trailing slash).
+  final String baseUrl;
+
+  /// Per-app write key, sent as the bearer token.
+  final String writeKey;
+
+  /// SDK version (used for telemetry headers).
+  final String sdkVersion;
+
+  final http.Client _http;
+  final RetryPolicy _retry;
+
+  /// Closes underlying resources.
+  void dispose() {
+    _http.close();
+  }
+
+  Map<String, String> _headers() => <String, String>{
+        'content-type': 'application/json; charset=utf-8',
+        'accept': 'application/json',
+        'authorization': 'Bearer $writeKey',
+        'x-ritmus-sdk': 'flutter/$sdkVersion',
+      };
+
+  Uri _uri(String path, [Map<String, String>? query]) {
+    final base = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final url = Uri.parse('$base$path');
+    if (query == null || query.isEmpty) return url;
+    return url.replace(queryParameters: <String, String>{
+      ...url.queryParameters,
+      ...query,
+    });
+  }
+
+  /// Performs a POST with a JSON body and retries on retryable failures.
+  Future<ApiResult<Map<String, Object?>>> postJson(
+    String path,
+    Object body,
+  ) =>
+      _sendWithRetry(
+        method: 'POST',
+        path: path,
+        body: body,
+      );
+
+  /// Performs a GET with query parameters and retries on retryable failures.
+  Future<ApiResult<Map<String, Object?>>> getJson(
+    String path, {
+    Map<String, String>? query,
+  }) =>
+      _sendWithRetry(
+        method: 'GET',
+        path: path,
+        query: query,
+      );
+
+  Future<ApiResult<Map<String, Object?>>> _sendWithRetry({
+    required String method,
+    required String path,
+    Object? body,
+    Map<String, String>? query,
+  }) async {
+    Object? lastError;
+    int? lastStatus;
+    for (var attempt = 1; attempt <= _retry.maxAttempts; attempt++) {
+      try {
+        final uri = _uri(path, query);
+        final req = http.Request(method, uri);
+        req.headers.addAll(_headers());
+        if (body != null) {
+          req.body = safeEncode(body);
+        }
+        final streamed = await _http.send(req).timeout(
+              const Duration(seconds: 30),
+            );
+        final res = await http.Response.fromStream(streamed);
+        lastStatus = res.statusCode;
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          if (res.bodyBytes.isEmpty) {
+            return ApiResult<Map<String, Object?>>(
+              success: true,
+              data: const <String, Object?>{},
+              status: res.statusCode,
+            );
+          }
+          final decoded = safeDecode(utf8.decode(res.bodyBytes));
+          if (decoded is Map<String, Object?>) {
+            return ApiResult<Map<String, Object?>>(
+              success: true,
+              data: decoded,
+              status: res.statusCode,
+            );
+          }
+          if (decoded is Map<Object?, Object?>) {
+            return ApiResult<Map<String, Object?>>(
+              success: true,
+              data: decoded.map(
+                (k, v) => MapEntry(k.toString(), v),
+              ),
+              status: res.statusCode,
+            );
+          }
+          return ApiResult<Map<String, Object?>>(
+            success: true,
+            data: const <String, Object?>{},
+            status: res.statusCode,
+          );
+        }
+        if (!_retry.isRetryable(res.statusCode) ||
+            attempt == _retry.maxAttempts) {
+          return ApiResult<Map<String, Object?>>(
+            success: false,
+            error: 'HTTP ${res.statusCode}',
+            status: res.statusCode,
+          );
+        }
+        final retryAfter = _parseRetryAfter(res.headers['retry-after']);
+        final delay = _retry.delayFor(attempt, retryAfterSeconds: retryAfter);
+        log.d('retrying $method $path in ${delay.inMilliseconds}ms '
+            '(status ${res.statusCode}, attempt $attempt)');
+        await Future<void>.delayed(delay);
+      } on Object catch (err, st) {
+        lastError = err;
+        log.e('network attempt $attempt failed', err, st);
+        if (attempt == _retry.maxAttempts) break;
+        final delay = _retry.delayFor(attempt);
+        await Future<void>.delayed(delay);
+      }
+    }
+    return ApiResult<Map<String, Object?>>(
+      success: false,
+      error: lastError?.toString() ?? 'network failure',
+      status: lastStatus,
+    );
+  }
+
+  int? _parseRetryAfter(String? header) {
+    if (header == null || header.isEmpty) return null;
+    final v = int.tryParse(header.trim());
+    if (v != null) return v;
+    return null;
+  }
+}

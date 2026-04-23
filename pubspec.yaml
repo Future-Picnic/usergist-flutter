@@ -1,0 +1,25 @@
+name: ritmus_feedback
+description: Ritmus mobile feedback SDK for Flutter. Lightweight, GDPR-aware, offline-first event ingest and native prompt rendering.
+version: 0.1.0
+homepage: https://ritmus.studio
+repository: https://github.com/ritmus-studio/ritmus-feedback
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  crypto: ^3.0.3
+  device_info_plus: ^10.1.0
+  flutter:
+    sdk: flutter
+  http: ^1.2.1
+  package_info_plus: ^8.0.0
+  path_provider: ^2.1.3
+  shared_preferences: ^2.2.3
+  uuid: ^4.4.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  flutter_test:
+    sdk: flutter
