@@ -16,6 +16,15 @@ class SdkEndpoints {
 
   /// Prompt responses.
   static const String responses = '/v1/sdk/responses';
+
+  /// Push — device token registration.
+  static const String pushRegisterToken = '/v1/sdk/push/register-token';
+
+  /// Push — device token update.
+  static const String pushUpdateToken = '/v1/sdk/push/update-token';
+
+  /// Push — device token invalidation.
+  static const String pushInvalidateToken = '/v1/sdk/push/invalidate-token';
 }
 
 /// Default base URLs for each deployment environment.
