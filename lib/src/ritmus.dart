@@ -114,6 +114,33 @@ class Ritmus {
     }
   }
 
+  /// Registers a device token with the control plane. Ignored if push
+  /// consent has not been granted.
+  static Future<void> registerPushToken(
+    String token,
+    String platform,
+    String environment,
+  ) async {
+    try {
+      final core = _core;
+      if (core == null) return;
+      await core.registerPushToken(token, platform, environment);
+    } on Object catch (err, st) {
+      log.e('registerPushToken failed', err, st);
+    }
+  }
+
+  /// Invalidates a previously-registered device token.
+  static Future<void> invalidatePushToken(String token) async {
+    try {
+      final core = _core;
+      if (core == null) return;
+      await core.invalidatePushToken(token);
+    } on Object catch (err, st) {
+      log.e('invalidatePushToken failed', err, st);
+    }
+  }
+
   /// Clears identity and local state (queue + caches + consent).
   static Future<void> reset() async {
     try {

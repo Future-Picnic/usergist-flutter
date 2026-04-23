@@ -24,6 +24,9 @@ class ConsentStore {
   /// `true` if the caller has explicitly granted analytics consent.
   bool get isAnalyticsGranted => _consent.analytics == true;
 
+  /// `true` if the caller has explicitly granted push-notifications consent.
+  bool get isPushGranted => _consent.push == true;
+
   /// Hydrates from disk.
   Future<void> hydrate() async {
     final raw = await _store.readString(_key);

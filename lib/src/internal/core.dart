@@ -231,6 +231,33 @@ class RitmusCore {
     }
   }
 
+  /// Registers a device token with the control plane. Consent-gated on push.
+  Future<void> registerPushToken(
+    String token,
+    String platform,
+    String environment,
+  ) async {
+    if (!_consent.isPushGranted) return;
+    await _api.postJson(SdkEndpoints.pushRegisterToken, <String, Object?>{
+      'anonymousId': identity.anonymousId,
+      'externalId': identity.externalId,
+      'token': token,
+      'platform': platform,
+      'environment': environment,
+      'language': null,
+      'timezone': DateTime.now().timeZoneName,
+      'sdkVersion': '0.1.0',
+      'optIn': true,
+    });
+  }
+
+  Future<void> invalidatePushToken(String token) async {
+    await _api.postJson(SdkEndpoints.pushInvalidateToken, <String, Object?>{
+      'anonymousId': identity.anonymousId,
+      'token': token,
+    });
+  }
+
   /// Clears all local state.
   Future<void> reset() async {
     await _queue.clear();
