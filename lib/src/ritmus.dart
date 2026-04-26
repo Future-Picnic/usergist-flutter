@@ -5,6 +5,7 @@ import 'internal/logger.dart';
 import 'internal/transport/endpoints.dart';
 import 'models/consent.dart';
 import 'models/response_info.dart';
+import 'models/survey.dart';
 import 'models/theme.dart';
 import 'ui/prompt_presenter.dart';
 
@@ -209,4 +210,55 @@ class Ritmus {
 
   /// Internal: current theme overrides.
   static PromptTheme? get internalThemeOverrides => _core?.themeOverrides;
+
+  // ---------------- Surveys ----------------
+
+  /// Host-app survey lifecycle handlers. Set before calling [openSurvey].
+  static SurveyHandlers surveyHandlers = const SurveyHandlers();
+
+  /// Returns the list of surveys currently open to this user. v1 surface:
+  /// consent-gated scaffold — the full native multi-step renderer is a
+  /// follow-up release. Returns an empty list today.
+  static Future<List<SurveySummary>> getAvailableSurveys() async {
+    try {
+      final core = _core;
+      if (core == null) return const <SurveySummary>[];
+      if (core.consent.allowsSurvey != true) return const <SurveySummary>[];
+      // v2: GET /v1/sdk/surveys/available once the renderer ships.
+      return const <SurveySummary>[];
+    } on Object catch (err, st) {
+      log.e('getAvailableSurveys failed', err, st);
+      return const <SurveySummary>[];
+    }
+  }
+
+  /// Requests that the host app render the specified survey. The SDK
+  /// notifies the host via [SurveyHandlers.onShow].
+  static void openSurvey(String surveyId, {String? language}) {
+    try {
+      final core = _core;
+      if (core == null) return;
+      if (core.consent.allowsSurvey != true) return;
+      surveyHandlers.onShow?.call(surveyId);
+    } on Object catch (err, st) {
+      log.e('openSurvey failed', err, st);
+    }
+  }
+
+  /// Handles a Ritmus survey share link. Returns true when the URI is a
+  /// recognized Ritmus survey link.
+  static bool handleSurveyDeepLink(Uri uri) {
+    try {
+      final segments = uri.pathSegments;
+      final pathToken = (segments.length >= 2 && segments[0] == 's') ? segments[1] : null;
+      final queryToken = uri.queryParameters['survey'];
+      final token = pathToken ?? queryToken;
+      if (token == null || token.isEmpty) return false;
+      log.d('survey.deep-link token=${token.substring(0, token.length.clamp(0, 8))}…');
+      return true;
+    } on Object catch (err, st) {
+      log.e('handleSurveyDeepLink failed', err, st);
+      return false;
+    }
+  }
 }

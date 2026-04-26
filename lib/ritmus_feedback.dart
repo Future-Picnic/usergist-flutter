@@ -25,3 +25,4 @@ export 'src/models/response_info.dart'
 export 'src/models/prompt.dart' show ClientPrompt, ArmedTrigger, FrequencyCaps;
 export 'src/push/push.dart'
     show Push, PushHandlers, RitmusPushMessage, PushPermissionStatus;
+export 'src/models/survey.dart' show SurveySummary, SurveyHandlers;
