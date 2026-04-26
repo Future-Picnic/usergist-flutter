@@ -18,6 +18,12 @@ class ConsentStore {
   /// Current consent value.
   Consent get value => _consent;
 
+  /// Alias for [value] — matches the naming used by the public Ritmus surface.
+  Consent get current => _consent;
+
+  /// `true` if the caller has explicitly granted survey consent.
+  bool get isSurveyGranted => _consent.survey == true;
+
   /// `true` if the caller has explicitly granted feedback consent.
   bool get isFeedbackGranted => _consent.feedback == true;
 

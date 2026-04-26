@@ -111,6 +111,9 @@ class RitmusCore {
   /// Stream of response info (public API).
   Stream<PromptResponseInfo> get onResponse => _respCtrl.stream;
 
+  /// Public read accessor for current consent state.
+  Consent get consent => _consent.current;
+
   /// Boots the core: hydrates state, boots timers, collects context.
   Future<void> start() async {
     if (_started) return;
