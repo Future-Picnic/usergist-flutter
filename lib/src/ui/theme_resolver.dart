@@ -57,7 +57,8 @@ class ResolvedPromptTheme {
         border: colorScheme.outlineVariant,
       ),
       radius: 20,
-      fontFamily: flutterTheme.textTheme.bodyMedium?.fontFamily,
+      fontFamily:
+          flutterTheme.textTheme.bodyMedium?.fontFamily ?? 'Plus Jakarta Sans',
     );
     final merged = base.merge(serverTheme).merge(overrides);
     return ResolvedPromptTheme(
