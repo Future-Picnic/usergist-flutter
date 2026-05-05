@@ -4,6 +4,7 @@ import 'internal/core.dart';
 import 'internal/logger.dart';
 import 'internal/transport/endpoints.dart';
 import 'models/consent.dart';
+import 'models/request.dart';
 import 'models/response_info.dart';
 import 'models/survey.dart';
 import 'models/theme.dart';
@@ -260,5 +261,71 @@ class Ritmus {
       log.e('handleSurveyDeepLink failed', err, st);
       return false;
     }
+  }
+
+  // ---------------- Feature Requests (5th pillar) ----------------
+  // STATUS: API surface declared; HTTP + UI tracked in PARITY.md as the
+  // Flutter-stub for this pillar.
+
+  static RequestsHandlers requestsHandlers = const RequestsHandlers();
+
+  /// Open the SDK-provided requests board UI.
+  static void openRequestsBoard() {
+    // TODO[P5.req-flutter]: present RequestsBoard widget.
+  }
+
+  /// Open the detail view for a specific request.
+  static void openRequestDetail(String requestId) {
+    // TODO[P5.req-flutter]: present RequestDetail widget.
+    // ignore: unused_local_variable
+    final _ = requestId;
+  }
+
+  /// Submit a new request. Validates client-side per spec §7.
+  static Future<FeatureRequest> submitRequest({
+    required String title,
+    required String description,
+  }) async {
+    if (title.isEmpty || title.length > 120) {
+      throw ArgumentError('title required, max 120 chars');
+    }
+    if (description.isEmpty || description.length > 1500) {
+      throw ArgumentError('description required, max 1500 chars');
+    }
+    throw UnimplementedError('Flutter submitRequest awaiting P5.req-flutter');
+  }
+
+  /// Fetch a page of requests.
+  static Future<GetRequestsResult> getRequests({
+    GetRequestsOptions options = const GetRequestsOptions(),
+  }) async {
+    // ignore: unused_local_variable
+    final _ = options;
+    return const GetRequestsResult(items: [], nextCursor: null);
+  }
+
+  /// Toggle upvote — idempotent, optimistic at the cache layer.
+  static Future<RequestVote> voteOnRequest(
+    String requestId, {
+    required bool vote,
+  }) async {
+    // ignore: unused_local_variable
+    final _ = (requestId, vote);
+    throw UnimplementedError('Flutter voteOnRequest awaiting P5.req-flutter');
+  }
+
+  /// Toggle follow.
+  static Future<RequestFollow> followRequest(
+    String requestId, {
+    required bool follow,
+  }) async {
+    // ignore: unused_local_variable
+    final _ = (requestId, follow);
+    throw UnimplementedError('Flutter followRequest awaiting P5.req-flutter');
+  }
+
+  /// Register host-app callbacks.
+  static void setRequestsHandlers(RequestsHandlers handlers) {
+    requestsHandlers = handlers;
   }
 }

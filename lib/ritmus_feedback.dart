@@ -26,3 +26,18 @@ export 'src/models/prompt.dart' show ClientPrompt, ArmedTrigger, FrequencyCaps;
 export 'src/push/push.dart'
     show Push, PushHandlers, RitmusPushMessage, PushPermissionStatus;
 export 'src/models/survey.dart' show SurveySummary, SurveyHandlers;
+export 'src/models/request.dart'
+    show
+        RequestStatus,
+        RequestFollowSource,
+        RequestSort,
+        RequestPersonalFilter,
+        FeatureRequest,
+        RequestSummary,
+        RequestSearchResult,
+        RequestVote,
+        RequestFollow,
+        GetRequestsOptions,
+        GetRequestsResult,
+        RequestStatusChangedNotice,
+        RequestsHandlers;
