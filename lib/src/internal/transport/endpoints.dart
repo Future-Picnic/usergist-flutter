@@ -25,6 +25,21 @@ class SdkEndpoints {
 
   /// Push — device token invalidation.
   static const String pushInvalidateToken = '/v1/sdk/push/invalidate-token';
+
+  /// Feature requests — list / submit.
+  static const String requests = '/v1/sdk/requests';
+
+  /// Feature requests — fetch by id.
+  static String request(String id) => '/v1/sdk/requests/$id';
+
+  /// Feature requests — vote toggle.
+  static String requestVote(String id) => '/v1/sdk/requests/$id/vote';
+
+  /// Feature requests — follow toggle.
+  static String requestFollow(String id) => '/v1/sdk/requests/$id/follow';
+
+  /// Feature requests — comments list / post.
+  static String requestComments(String id) => '/v1/sdk/requests/$id/comments';
 }
 
 /// Default base URLs for each deployment environment.

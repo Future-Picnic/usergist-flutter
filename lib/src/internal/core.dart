@@ -15,6 +15,9 @@ import 'identity.dart';
 import 'json.dart';
 import 'lifecycle/app_lifecycle.dart';
 import 'logger.dart';
+import 'requests/requests_api.dart';
+import 'requests/requests_cache.dart';
+import 'secure_store.dart';
 import 'storage.dart';
 import 'transport/api_client.dart';
 import 'transport/endpoints.dart';
@@ -75,6 +78,12 @@ class RitmusCore {
   late final ApiClient _api;
   late final AppLifecycle _lifecycle;
 
+  /// In-memory cache for optimistic vote/follow mutations.
+  final RequestsCache requestsCache = RequestsCache();
+
+  /// HTTP helper for the Feature Requests pillar. Initialised in `start()`.
+  RequestsApi get requestsApi => RequestsApi(_api);
+
   final StreamController<PromptShowRequest> _showCtrl =
       StreamController<PromptShowRequest>.broadcast();
   final StreamController<String> _shownCtrl =
@@ -119,8 +128,11 @@ class RitmusCore {
     if (_started) return;
     _started = true;
     _kv = SharedPrefsStore(writeKey: writeKey);
-    identity = IdentityStore(_kv);
-    _consent = ConsentStore(_kv);
+    final secureStore = SecureKeyValueStore(writeKey: writeKey, legacy: _kv);
+    // Secrets (identity + consent) live in the encrypted store; bulk
+    // frequency-cap state stays in plaintext prefs (not secret, large).
+    identity = IdentityStore(secureStore);
+    _consent = ConsentStore(secureStore);
     _freqCaps = FrequencyCapStore(_kv);
     await Future.wait<void>(<Future<void>>[
       identity.hydrate(),

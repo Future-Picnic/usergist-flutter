@@ -82,4 +82,43 @@ void main() {
     expect(q.length, 0);
     expect(q.isEmpty, true);
   });
+
+  test('persisted file is prefixed with a version header line', () async {
+    final file = File('${tmp.path}/q.jsonl');
+    final q = EventQueue(file: file, maxSize: 10);
+    await q.hydrate();
+    await q.append(mkEvent(1));
+    final lines = (await file.readAsString()).split('\n');
+    expect(lines.first, '{"version":1}');
+  });
+
+  test('hydrates legacy bare-line snapshots and rewrites with header',
+      () async {
+    final file = File('${tmp.path}/q.jsonl');
+    // Pre-versioning SDK builds wrote bare event lines with no header.
+    // Mirrors the fallback in packages/sdk-react-native/src/internal/queue.ts.
+    await file.writeAsString(
+      '{"name":"legacy","timestamp":"2026-01-01T00:00:00.000Z","anonymousId":"a"}\n',
+    );
+    final q = EventQueue(file: file, maxSize: 10);
+    await q.hydrate();
+    expect(q.length, 1);
+    expect(q.peek(1).first.name, 'legacy');
+
+    // Force a rewrite — next persist should emit the header.
+    await q.append(mkEvent(99));
+    final lines = (await file.readAsString()).split('\n');
+    expect(lines.first, '{"version":1}');
+  });
+
+  test('discards persisted snapshots from an unknown schema version',
+      () async {
+    final file = File('${tmp.path}/q.jsonl');
+    await file.writeAsString(
+      '{"version":999}\n{"name":"x","timestamp":"2026-01-01T00:00:00.000Z","anonymousId":"a"}\n',
+    );
+    final q = EventQueue(file: file, maxSize: 10);
+    await q.hydrate();
+    expect(q.length, 0);
+  });
 }

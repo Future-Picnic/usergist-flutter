@@ -6,11 +6,31 @@ import '../models/event.dart';
 import 'json.dart';
 import 'logger.dart';
 
+// PORTED FROM: packages/sdk-react-native/src/internal/queue.ts
+//
+// Persisted shape on disk:
+//   <header line>: {"version":1}\n
+//   <event line 1>: {...}\n
+//   <event line 2>: {...}\n
+//
+// Bumped every time the on-disk shape changes; older snapshots are
+// discarded rather than risk a deserialise mismatch. Events are
+// best-effort, not durable contracts.
+//
+// Legacy migration: pre-versioning builds wrote bare {...}\n event lines
+// with no header. On hydrate, if the first line is missing a "version"
+// key, we treat the entire file as legacy events; the next _persist()
+// rewrite emits the header.
+const int _queueSchemaVersion = 1;
+const String _queueHeaderLine = '{"version":$_queueSchemaVersion}';
+
 /// Bounded, persistent FIFO queue of pending ingest events.
 ///
 /// * Appends are non-blocking.
 /// * On overflow, the oldest event is dropped.
-/// * State is mirrored to a JSON-lines file which is rewritten on flush.
+/// * State is mirrored to a versioned JSON-lines file: a header line
+///   `{"version":N}` followed by one [IngestEvent] per line. Rewritten
+///   on every change.
 class EventQueue {
   /// Creates a queue writing to [file] with [maxSize] elements max.
   EventQueue({required File file, required int maxSize})
@@ -39,11 +59,28 @@ class EventQueue {
       final contents = await _file.readAsString();
       if (contents.isEmpty) return;
       final lines = contents.split('\n');
+      var headerConsumed = false;
       for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
         final map = safeDecodeMap(trimmed);
         if (map.isEmpty) continue;
+        if (!headerConsumed) {
+          headerConsumed = true;
+          // Versioned header line: {"version": N}. Discard the whole
+          // queue if N is unknown, skip if it matches; otherwise treat
+          // as a legacy event line and fall through to parsing.
+          if (map.containsKey('version') && map.length == 1) {
+            final version = map['version'];
+            if (version is int && version == _queueSchemaVersion) {
+              continue;
+            }
+            log.w('queue hydrate: discarding unknown version $version');
+            _buffer.clear();
+            await _file.writeAsString('');
+            return;
+          }
+        }
         try {
           _buffer.addLast(IngestEvent.fromJson(map));
         } on Object catch (err) {
@@ -100,6 +137,7 @@ class EventQueue {
         return;
       }
       final sb = StringBuffer();
+      sb.writeln(_queueHeaderLine);
       for (final e in _buffer) {
         sb.writeln(safeEncode(e.toJson()));
       }

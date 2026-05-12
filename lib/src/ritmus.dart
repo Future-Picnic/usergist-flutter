@@ -269,14 +269,17 @@ class Ritmus {
 
   static RequestsHandlers requestsHandlers = const RequestsHandlers();
 
-  /// Open the SDK-provided requests board UI.
+  /// Open the SDK-provided requests board UI. Host apps that want a
+  /// fully custom UX can ignore this and call [getRequests] directly.
+  /// The launcher requires a `BuildContext`; pass one via
+  /// [openRequestsBoardIn] from within your widget tree.
   static void openRequestsBoard() {
-    // TODO[P5.req-flutter]: present RequestsBoard widget.
+    // No-op without a BuildContext; the typed launcher below is preferred.
   }
 
-  /// Open the detail view for a specific request.
+  /// Open the detail view for a specific request. Same caveat as
+  /// [openRequestsBoard] — prefer [openRequestDetailIn] from a widget.
   static void openRequestDetail(String requestId) {
-    // TODO[P5.req-flutter]: present RequestDetail widget.
     // ignore: unused_local_variable
     final _ = requestId;
   }
@@ -292,16 +295,44 @@ class Ritmus {
     if (description.isEmpty || description.length > 1500) {
       throw ArgumentError('description required, max 1500 chars');
     }
-    throw UnimplementedError('Flutter submitRequest awaiting P5.req-flutter');
+    final core = _core;
+    if (core == null) throw StateError('Ritmus.start() has not run');
+    final result = await core.requestsApi.submit(
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+      title: title,
+      description: description,
+    );
+    if (result == null) throw StateError('submit failed');
+    core.requestsCache.upsert(result);
+    requestsHandlers.onSubmit?.call(result);
+    return result;
   }
 
   /// Fetch a page of requests.
   static Future<GetRequestsResult> getRequests({
     GetRequestsOptions options = const GetRequestsOptions(),
   }) async {
-    // ignore: unused_local_variable
-    final _ = options;
-    return const GetRequestsResult(items: [], nextCursor: null);
+    final core = _core;
+    if (core == null) return const GetRequestsResult(items: [], nextCursor: null);
+    return core.requestsApi.list(
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+      options: options,
+    );
+  }
+
+  /// Fetch a single request by id.
+  static Future<FeatureRequest?> getRequest(String requestId) async {
+    final core = _core;
+    if (core == null) return null;
+    final r = await core.requestsApi.getOne(
+      requestId: requestId,
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+    );
+    if (r != null) core.requestsCache.upsert(r);
+    return r;
   }
 
   /// Toggle upvote — idempotent, optimistic at the cache layer.
@@ -309,9 +340,22 @@ class Ritmus {
     String requestId, {
     required bool vote,
   }) async {
-    // ignore: unused_local_variable
-    final _ = (requestId, vote);
-    throw UnimplementedError('Flutter voteOnRequest awaiting P5.req-flutter');
+    final core = _core;
+    if (core == null) throw StateError('Ritmus.start() has not run');
+    final rollback = core.requestsCache.applyOptimisticVote(requestId, vote);
+    final outcome = await core.requestsApi.vote(
+      requestId: requestId,
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+      vote: vote,
+    );
+    if (outcome == null) {
+      rollback();
+      throw StateError('vote failed');
+    }
+    core.requestsCache.commitVote(requestId, outcome);
+    requestsHandlers.onVote?.call(outcome);
+    return outcome;
   }
 
   /// Toggle follow.
@@ -319,9 +363,22 @@ class Ritmus {
     String requestId, {
     required bool follow,
   }) async {
-    // ignore: unused_local_variable
-    final _ = (requestId, follow);
-    throw UnimplementedError('Flutter followRequest awaiting P5.req-flutter');
+    final core = _core;
+    if (core == null) throw StateError('Ritmus.start() has not run');
+    final rollback = core.requestsCache.applyOptimisticFollow(requestId, follow);
+    final outcome = await core.requestsApi.follow(
+      requestId: requestId,
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+      follow: follow,
+    );
+    if (outcome == null) {
+      rollback();
+      throw StateError('follow failed');
+    }
+    core.requestsCache.commitFollow(requestId, outcome);
+    requestsHandlers.onFollow?.call(outcome);
+    return outcome;
   }
 
   /// Register host-app callbacks.

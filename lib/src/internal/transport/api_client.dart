@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../json.dart';
 import '../logger.dart';
 import 'retry_policy.dart';
+import 'tls_pinning.dart';
 
 /// A single HTTP call's outcome.
 class ApiResult<T> {
@@ -35,7 +36,8 @@ class ApiClient {
     required this.sdkVersion,
     http.Client? httpClient,
     RetryPolicy? retryPolicy,
-  })  : _http = httpClient ?? http.Client(),
+    List<TlsPinSet>? pinSets,
+  })  : _http = httpClient ?? buildPinnedHttpClient(pinSets ?? defaultTlsPinSets()),
         _retry = retryPolicy ?? RetryPolicy();
 
   /// Base URL (no trailing slash).
