@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import 'ritmus.dart';
 import 'ui/prompt_presenter.dart';
+import 'ui/requests_host.dart';
 
 /// Mounts the Ritmus prompt presenter on top of the host app's
 /// navigator so prompts can render as modal bottom sheets over the
@@ -66,7 +67,14 @@ class _RitmusProviderState extends State<RitmusProvider> {
             ..updateThemeOverrides(Ritmus.internalThemeOverrides)
             ..attach(innerCtx);
         });
-        return widget.child;
+        return Stack(
+          children: [
+            widget.child,
+            // 0×0 widget — only attaches its initState/dispose to listen
+            // for openRequestsBoard / openRequestDetail events.
+            const RequestsNavHost(),
+          ],
+        );
       },
     );
   }

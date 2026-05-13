@@ -98,6 +98,30 @@ class ApiClient {
         query: query,
       );
 
+  /// Performs a PATCH with a JSON body and retries on retryable failures.
+  Future<ApiResult<Map<String, Object?>>> patchJson(
+    String path,
+    Object body,
+  ) =>
+      _sendWithRetry(
+        method: 'PATCH',
+        path: path,
+        body: body,
+      );
+
+  /// Performs a DELETE with optional query params and retries on retryable
+  /// failures. Body is intentionally not supported — the SDK uses query
+  /// strings to carry author identity on author-checked deletes.
+  Future<ApiResult<Map<String, Object?>>> deleteJson(
+    String path, {
+    Map<String, String>? query,
+  }) =>
+      _sendWithRetry(
+        method: 'DELETE',
+        path: path,
+        query: query,
+      );
+
   Future<ApiResult<Map<String, Object?>>> _sendWithRetry({
     required String method,
     required String path,

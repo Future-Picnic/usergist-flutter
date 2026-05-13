@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'internal/core.dart';
 import 'internal/logger.dart';
+import 'internal/requests/requests_api.dart';
 import 'internal/transport/endpoints.dart';
+import 'ui/requests_host.dart';
 import 'models/consent.dart';
 import 'models/request.dart';
 import 'models/response_info.dart';
@@ -269,19 +271,16 @@ class Ritmus {
 
   static RequestsHandlers requestsHandlers = const RequestsHandlers();
 
-  /// Open the SDK-provided requests board UI. Host apps that want a
-  /// fully custom UX can ignore this and call [getRequests] directly.
-  /// The launcher requires a `BuildContext`; pass one via
-  /// [openRequestsBoardIn] from within your widget tree.
+  /// Open the SDK-provided requests board UI. Drop-in: as long as the
+  /// host app has mounted `RitmusProvider` in `MaterialApp.builder`, no
+  /// further wiring is required.
   static void openRequestsBoard() {
-    // No-op without a BuildContext; the typed launcher below is preferred.
+    RequestsNav.board();
   }
 
-  /// Open the detail view for a specific request. Same caveat as
-  /// [openRequestsBoard] — prefer [openRequestDetailIn] from a widget.
+  /// Open the detail view for a specific request.
   static void openRequestDetail(String requestId) {
-    // ignore: unused_local_variable
-    final _ = requestId;
+    RequestsNav.detail(requestId);
   }
 
   /// Submit a new request. Validates client-side per spec §7.
@@ -379,6 +378,78 @@ class Ritmus {
     core.requestsCache.commitFollow(requestId, outcome);
     requestsHandlers.onFollow?.call(outcome);
     return outcome;
+  }
+
+  /// Fetch comments for a request, ordered oldest-first.
+  static Future<List<FlutterRequestComment>> getComments(
+    String requestId,
+  ) async {
+    final core = _core;
+    if (core == null) return const [];
+    return core.requestsApi.comments(
+      requestId: requestId,
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+    );
+  }
+
+  /// Post a comment on a request.
+  static Future<FlutterRequestComment?> postComment(
+    String requestId,
+    String body,
+  ) async {
+    if (body.trim().isEmpty || body.length > 1000) {
+      throw ArgumentError('comment body required, max 1000 chars');
+    }
+    final core = _core;
+    if (core == null) throw StateError('Ritmus.start() has not run');
+    return core.requestsApi.postComment(
+      requestId: requestId,
+      anonymousId: core.identity.anonymousId,
+      externalId: core.identity.externalId,
+      body: body,
+    );
+  }
+
+  /// Edit one of the viewer's own comments.
+  static Future<FlutterRequestComment?> editComment(
+    String requestId,
+    String commentId,
+    String body,
+  ) async {
+    if (body.trim().isEmpty || body.length > 1000) {
+      throw ArgumentError('comment body required, max 1000 chars');
+    }
+    final core = _core;
+    if (core == null) throw StateError('Ritmus.start() has not run');
+    return core.requestsApi.editComment(
+      requestId: requestId,
+      commentId: commentId,
+      anonymousId: core.identity.anonymousId,
+      body: body,
+    );
+  }
+
+  /// Delete one of the viewer's own comments.
+  static Future<bool> deleteComment(
+    String requestId,
+    String commentId,
+  ) async {
+    final core = _core;
+    if (core == null) return false;
+    return core.requestsApi.deleteComment(
+      requestId: requestId,
+      commentId: commentId,
+      anonymousId: core.identity.anonymousId,
+    );
+  }
+
+  /// Fetch per-app branding (entry label, accent color, etc.). The
+  /// SDK UI uses this; host apps rarely need to call it directly.
+  static Future<FlutterRequestBranding?> getRequestBranding() async {
+    final core = _core;
+    if (core == null) return null;
+    return core.requestsApi.getBranding();
   }
 
   /// Register host-app callbacks.

@@ -29,6 +29,19 @@ class FlutterRequestComment {
   final bool isFromTeam;
 }
 
+class FlutterRequestBranding {
+  const FlutterRequestBranding({
+    required this.entryLabel,
+    this.accentColor,
+    this.logoUrl,
+    this.introCopy,
+  });
+  final String entryLabel;
+  final String? accentColor;
+  final String? logoUrl;
+  final String? introCopy;
+}
+
 class RequestsApi {
   RequestsApi(this._api);
 
@@ -180,6 +193,45 @@ class RequestsApi {
         await _api.postJson(SdkEndpoints.requestComments(requestId), payload);
     if (!res.success || res.data == null) return null;
     return _decodeComment(res.data!);
+  }
+
+  Future<FlutterRequestComment?> editComment({
+    required String requestId,
+    required String commentId,
+    required String anonymousId,
+    required String body,
+  }) async {
+    final payload = <String, Object?>{'anonymousId': anonymousId, 'body': body};
+    final res = await _api.patchJson(
+      SdkEndpoints.requestComment(requestId, commentId),
+      payload,
+    );
+    if (!res.success || res.data == null) return null;
+    return _decodeComment(res.data!);
+  }
+
+  Future<bool> deleteComment({
+    required String requestId,
+    required String commentId,
+    required String anonymousId,
+  }) async {
+    final res = await _api.deleteJson(
+      SdkEndpoints.requestComment(requestId, commentId),
+      query: {'anonymousId': anonymousId},
+    );
+    return res.success;
+  }
+
+  Future<FlutterRequestBranding?> getBranding() async {
+    final res = await _api.getJson(SdkEndpoints.requestBranding);
+    if (!res.success || res.data == null) return null;
+    final m = res.data!;
+    return FlutterRequestBranding(
+      entryLabel: (m['entryLabel'] as String?) ?? 'Suggestions',
+      accentColor: m['accentColor'] as String?,
+      logoUrl: m['logoUrl'] as String?,
+      introCopy: m['introCopy'] as String?,
+    );
   }
 
   // --- decoders ---

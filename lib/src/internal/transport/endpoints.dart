@@ -40,6 +40,13 @@ class SdkEndpoints {
 
   /// Feature requests — comments list / post.
   static String requestComments(String id) => '/v1/sdk/requests/$id/comments';
+
+  /// Feature requests — single comment (edit / delete).
+  static String requestComment(String requestId, String commentId) =>
+      '/v1/sdk/requests/$requestId/comments/$commentId';
+
+  /// Feature requests — per-app branding for the SDK UI.
+  static const String requestBranding = '/v1/sdk/request-branding';
 }
 
 /// Default base URLs for each deployment environment.
