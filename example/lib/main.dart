@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:ritmus_feedback/ritmus_feedback.dart';
+import 'package:usergist_feedback/usergist_feedback.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Ritmus.init(
+  await UserGist.init(
     writeKey: 'wk_example_replace_me',
-    environment: RitmusEnvironment.development,
+    environment: UserGistEnvironment.development,
     debug: true,
   );
   runApp(const ExampleApp());
@@ -19,12 +19,12 @@ class ExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ritmus SDK Example',
+      title: 'UserGist SDK Example',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      builder: (ctx, child) => RitmusProvider(child: child!),
+      builder: (ctx, child) => UserGistProvider(child: child!),
       home: const _HomeScreen(),
     );
   }
@@ -43,7 +43,7 @@ class _HomeScreenState extends State<_HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ritmus example')),
+      appBar: AppBar(title: const Text('UserGist example')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -67,12 +67,12 @@ class _HomeScreenState extends State<_HomeScreen> {
             ),
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed: Ritmus.flush,
+              onPressed: UserGist.flush,
               child: const Text('Flush now'),
             ),
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed: Ritmus.reset,
+              onPressed: UserGist.reset,
               child: const Text('Reset'),
             ),
           ],
@@ -82,12 +82,12 @@ class _HomeScreenState extends State<_HomeScreen> {
   }
 
   Future<void> _grantConsent() async {
-    await Ritmus.setConsent(const Consent(analytics: true, feedback: true));
+    await UserGist.setConsent(const Consent(analytics: true, feedback: true));
     setState(() => _status = 'consent granted');
   }
 
   Future<void> _identify() async {
-    await Ritmus.identify(
+    await UserGist.identify(
       'user_123',
       properties: <String, Object?>{'plan': 'pro'},
     );
@@ -95,7 +95,7 @@ class _HomeScreenState extends State<_HomeScreen> {
   }
 
   void _track() {
-    Ritmus.track(
+    UserGist.track(
       'checkout_completed',
       properties: <String, Object?>{'amount': 99.0, 'currency': 'USD'},
     );

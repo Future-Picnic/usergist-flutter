@@ -4,11 +4,11 @@ import 'package:flutter/foundation.dart';
 /// hood so output is elided in release builds by default.
 ///
 /// Set [setDebug] to `true` to enable verbose traces.
-class RitmusLogger {
-  RitmusLogger._();
+class UserGistLogger {
+  UserGistLogger._();
 
   /// Singleton instance.
-  static final RitmusLogger instance = RitmusLogger._();
+  static final UserGistLogger instance = UserGistLogger._();
 
   bool _debug = false;
 
@@ -25,25 +25,25 @@ class RitmusLogger {
   void d(String message) {
     if (!_debug && !kDebugMode) return;
     if (!_debug) return;
-    debugPrint('[ritmus] $message');
+    debugPrint('[usergist] $message');
   }
 
   /// Logs an info line. Only emitted when debug is enabled.
   void i(String message) {
     if (!_debug) return;
-    debugPrint('[ritmus] $message');
+    debugPrint('[usergist] $message');
   }
 
   /// Logs a warning. Always emitted in debug mode.
   void w(String message) {
     if (!kDebugMode && !_debug) return;
-    debugPrint('[ritmus][warn] $message');
+    debugPrint('[usergist][warn] $message');
   }
 
   /// Logs an error with optional stack-trace.
   void e(String message, [Object? error, StackTrace? stack]) {
     if (!kDebugMode && !_debug) return;
-    debugPrint('[ritmus][error] $message${error != null ? ': $error' : ''}');
+    debugPrint('[usergist][error] $message${error != null ? ': $error' : ''}');
     if (stack != null && _debug) {
       debugPrint(stack.toString());
     }
@@ -51,4 +51,4 @@ class RitmusLogger {
 }
 
 /// Shorthand accessor.
-RitmusLogger get log => RitmusLogger.instance;
+UserGistLogger get log => UserGistLogger.instance;

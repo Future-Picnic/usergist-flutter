@@ -1,5 +1,5 @@
-name: ritmus_feedback_example
-description: Minimal example app showing Ritmus SDK integration.
+name: usergist_feedback_example
+description: Minimal example app showing UserGist SDK integration.
 publish_to: "none"
 version: 0.1.0
 
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  ritmus_feedback:
+  usergist_feedback:
     path: ../
 
 dev_dependencies:

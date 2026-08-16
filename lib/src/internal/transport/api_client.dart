@@ -61,7 +61,7 @@ class ApiClient {
         'content-type': 'application/json; charset=utf-8',
         'accept': 'application/json',
         'authorization': 'Bearer $writeKey',
-        'x-ritmus-sdk': 'flutter/$sdkVersion',
+        'x-usergist-sdk': 'flutter/$sdkVersion',
       };
 
   Uri _uri(String path, [Map<String, String>? query]) {

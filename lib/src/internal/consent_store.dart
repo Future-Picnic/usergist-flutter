@@ -4,7 +4,7 @@ import '../models/consent.dart';
 import 'json.dart';
 import 'storage.dart';
 
-/// Persistent consent store. Transport in [Transport] / [Ritmus] is
+/// Persistent consent store. Transport in [Transport] / [UserGist] is
 /// gated on [isFeedbackGranted] returning `true`.
 class ConsentStore {
   /// Creates a consent store.
@@ -18,7 +18,7 @@ class ConsentStore {
   /// Current consent value.
   Consent get value => _consent;
 
-  /// Alias for [value] — matches the naming used by the public Ritmus surface.
+  /// Alias for [value] — matches the naming used by the public UserGist surface.
   Consent get current => _consent;
 
   /// `true` if the caller has explicitly granted survey consent.

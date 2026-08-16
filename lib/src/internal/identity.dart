@@ -36,7 +36,7 @@ class IdentityStore {
   /// The current external identifier (if set).
   String? get externalId => _externalId;
 
-  /// Sets the external identifier (called by [Ritmus.identify]).
+  /// Sets the external identifier (called by [UserGist.identify]).
   Future<void> setExternalId(String? id) async {
     _externalId = id;
     if (id == null) {

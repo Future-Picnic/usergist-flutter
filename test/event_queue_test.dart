@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ritmus_feedback/src/internal/event_queue.dart';
-import 'package:ritmus_feedback/src/models/event.dart';
+import 'package:usergist_feedback/src/internal/event_queue.dart';
+import 'package:usergist_feedback/src/models/event.dart';
 
 void main() {
   late Directory tmp;
 
   setUp(() async {
-    tmp = await Directory.systemTemp.createTemp('ritmus_queue_');
+    tmp = await Directory.systemTemp.createTemp('usergist_queue_');
   });
 
   tearDown(() async {

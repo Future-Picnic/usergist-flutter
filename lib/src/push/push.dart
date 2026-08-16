@@ -1,9 +1,9 @@
-/// Ritmus Push — Flutter public surface.
+/// UserGist Push — Flutter public surface.
 ///
 /// Host apps own FCM / APNs plumbing (via `firebase_messaging` or similar).
 /// They forward tokens and payloads here.
 
-import '../ritmus.dart';
+import '../usergist.dart';
 
 enum PushPermissionStatus {
   notDetermined,
@@ -13,8 +13,8 @@ enum PushPermissionStatus {
   ephemeral,
 }
 
-class RitmusPushMessage {
-  const RitmusPushMessage({
+class UserGistPushMessage {
+  const UserGistPushMessage({
     this.campaignId,
     this.variantId,
     this.deliveryId,
@@ -32,39 +32,39 @@ class RitmusPushMessage {
   final String? title;
   final String? body;
 
-  static RitmusPushMessage? parseIos(Map<String, Object?> userInfo) {
-    final ritmus = userInfo['ritmus'];
-    if (ritmus is! Map) return null;
-    final ritmusMap = Map<String, Object?>.from(ritmus);
+  static UserGistPushMessage? parseIos(Map<String, Object?> userInfo) {
+    final usergist = userInfo['usergist'];
+    if (usergist is! Map) return null;
+    final usergistMap = Map<String, Object?>.from(usergist);
     final aps = userInfo['aps'];
     Map<String, Object?>? alert;
     if (aps is Map && aps['alert'] is Map) {
       alert = Map<String, Object?>.from(aps['alert'] as Map);
     }
-    return RitmusPushMessage(
-      campaignId: ritmusMap['campaignId'] as String?,
-      variantId: ritmusMap['variantId'] as String?,
-      deliveryId: ritmusMap['deliveryId'] as String?,
-      language: ritmusMap['language'] as String?,
-      deepLink: ritmusMap['deepLink'] as String?,
+    return UserGistPushMessage(
+      campaignId: usergistMap['campaignId'] as String?,
+      variantId: usergistMap['variantId'] as String?,
+      deliveryId: usergistMap['deliveryId'] as String?,
+      language: usergistMap['language'] as String?,
+      deepLink: usergistMap['deepLink'] as String?,
       title: alert?['title'] as String?,
       body: alert?['body'] as String?,
     );
   }
 
-  static RitmusPushMessage? parseFcm(
+  static UserGistPushMessage? parseFcm(
     Map<String, String> data, {
     String? title,
     String? body,
   }) {
-    final campaignId = data['ritmus_campaign_id'];
+    final campaignId = data['usergist_campaign_id'];
     if (campaignId == null) return null;
-    return RitmusPushMessage(
+    return UserGistPushMessage(
       campaignId: campaignId,
-      variantId: data['ritmus_variant_id'],
-      deliveryId: data['ritmus_delivery_id'],
-      language: data['ritmus_language'],
-      deepLink: data['ritmus_deep_link'],
+      variantId: data['usergist_variant_id'],
+      deliveryId: data['usergist_delivery_id'],
+      language: data['usergist_language'],
+      deepLink: data['usergist_deep_link'],
       title: title,
       body: body,
     );
@@ -72,9 +72,9 @@ class RitmusPushMessage {
 }
 
 typedef OnReceive = void Function(
-    RitmusPushMessage message, Map<String, Object?> raw);
-typedef OnOpen = void Function(RitmusPushMessage message);
-typedef OnAction = void Function(RitmusPushMessage message, String actionButton);
+    UserGistPushMessage message, Map<String, Object?> raw);
+typedef OnOpen = void Function(UserGistPushMessage message);
+typedef OnAction = void Function(UserGistPushMessage message, String actionButton);
 
 class PushHandlers {
   PushHandlers({this.onReceive, this.onOpen, this.onAction});
@@ -100,11 +100,11 @@ class Push {
     String platform, {
     String environment = 'production',
   }) async {
-    await Ritmus.registerPushToken(token, platform, environment);
+    await UserGist.registerPushToken(token, platform, environment);
   }
 
   Future<void> invalidateDeviceToken(String token) async {
-    await Ritmus.invalidatePushToken(token);
+    await UserGist.invalidatePushToken(token);
   }
 
   void handleReceived({
@@ -113,11 +113,11 @@ class Push {
     String? title,
     String? body,
   }) {
-    RitmusPushMessage? msg;
-    if (userInfo != null) msg = RitmusPushMessage.parseIos(userInfo);
-    if (msg == null && data != null) msg = RitmusPushMessage.parseFcm(data, title: title, body: body);
+    UserGistPushMessage? msg;
+    if (userInfo != null) msg = UserGistPushMessage.parseIos(userInfo);
+    if (msg == null && data != null) msg = UserGistPushMessage.parseFcm(data, title: title, body: body);
     if (msg == null) return;
-    Ritmus.track('\$push_received', <String, Object?>{
+    UserGist.track('\$push_received', <String, Object?>{
       'campaign_id': msg.campaignId,
       'variant_id': msg.variantId,
       'delivery_id': msg.deliveryId,
@@ -131,12 +131,12 @@ class Push {
     Map<String, String>? data,
     String? actionIdentifier,
   }) {
-    RitmusPushMessage? msg;
-    if (userInfo != null) msg = RitmusPushMessage.parseIos(userInfo);
-    if (msg == null && data != null) msg = RitmusPushMessage.parseFcm(data);
+    UserGistPushMessage? msg;
+    if (userInfo != null) msg = UserGistPushMessage.parseIos(userInfo);
+    if (msg == null && data != null) msg = UserGistPushMessage.parseFcm(data);
     if (msg == null) return;
     if (actionIdentifier != null && actionIdentifier.isNotEmpty) {
-      Ritmus.track('\$push_action_clicked', <String, Object?>{
+      UserGist.track('\$push_action_clicked', <String, Object?>{
         'campaign_id': msg.campaignId,
         'variant_id': msg.variantId,
         'delivery_id': msg.deliveryId,
@@ -144,7 +144,7 @@ class Push {
       });
       _handlers.onAction?.call(msg, actionIdentifier);
     } else {
-      Ritmus.track('\$push_opened', <String, Object?>{
+      UserGist.track('\$push_opened', <String, Object?>{
         'campaign_id': msg.campaignId,
         'variant_id': msg.variantId,
         'delivery_id': msg.deliveryId,

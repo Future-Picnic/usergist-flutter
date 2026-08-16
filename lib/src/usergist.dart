@@ -13,7 +13,7 @@ import 'models/theme.dart';
 import 'ui/prompt_presenter.dart';
 
 /// Deployment environment enum. Maps to a default base URL.
-enum RitmusEnvironment {
+enum UserGistEnvironment {
   /// Production.
   production,
 
@@ -25,29 +25,29 @@ enum RitmusEnvironment {
 
   /// Default API base URL for this environment.
   String get defaultUrl => switch (this) {
-        RitmusEnvironment.production => DefaultApiUrls.production,
-        RitmusEnvironment.staging => DefaultApiUrls.staging,
-        RitmusEnvironment.development => DefaultApiUrls.development,
+        UserGistEnvironment.production => DefaultApiUrls.production,
+        UserGistEnvironment.staging => DefaultApiUrls.staging,
+        UserGistEnvironment.development => DefaultApiUrls.development,
       };
 }
 
-/// Public static entrypoint to the Ritmus feedback SDK.
+/// Public static entrypoint to the UserGist feedback SDK.
 ///
 /// All methods wrap their implementation in a try/catch so the SDK
 /// never throws across its public boundary.
-class Ritmus {
-  Ritmus._();
+class UserGist {
+  UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
   static const String sdkVersion = '0.1.0';
 
-  static RitmusCore? _core;
+  static UserGistCore? _core;
 
   /// Initializes the SDK. Safe to call multiple times — subsequent calls
   /// are ignored (the first configuration wins).
   static Future<void> init({
     required String writeKey,
-    RitmusEnvironment environment = RitmusEnvironment.production,
+    UserGistEnvironment environment = UserGistEnvironment.production,
     String? apiUrl,
     bool debug = false,
     Duration flushInterval = const Duration(seconds: 15),
@@ -57,11 +57,11 @@ class Ritmus {
   }) async {
     try {
       if (_core != null) {
-        log.w('Ritmus.init called more than once — ignoring');
+        log.w('UserGist.init called more than once — ignoring');
         return;
       }
       log.setDebug(debug);
-      final core = RitmusCore(
+      final core = UserGistCore(
         writeKey: writeKey,
         baseUrl: apiUrl ?? environment.defaultUrl,
         sdkVersion: sdkVersion,
@@ -73,7 +73,7 @@ class Ritmus {
       await core.start();
       _core = core;
     } on Object catch (err, st) {
-      log.e('Ritmus.init failed', err, st);
+      log.e('UserGist.init failed', err, st);
     }
   }
 
@@ -195,7 +195,7 @@ class Ritmus {
   static Stream<PromptResponseInfo> get onResponse =>
       _core?.onResponse ?? const Stream<PromptResponseInfo>.empty();
 
-  // ----- internal accessors used by RitmusProvider -----
+  // ----- internal accessors used by UserGistProvider -----
 
   /// Internal: stream of prompt-show requests routed to the UI layer.
   static Stream<PromptShowRequest> get internalShowStream =>
@@ -248,8 +248,8 @@ class Ritmus {
     }
   }
 
-  /// Handles a Ritmus survey share link. Returns true when the URI is a
-  /// recognized Ritmus survey link.
+  /// Handles a UserGist survey share link. Returns true when the URI is a
+  /// recognized UserGist survey link.
   static bool handleSurveyDeepLink(Uri uri) {
     try {
       final segments = uri.pathSegments;
@@ -272,7 +272,7 @@ class Ritmus {
   static RequestsHandlers requestsHandlers = const RequestsHandlers();
 
   /// Open the SDK-provided requests board UI. Drop-in: as long as the
-  /// host app has mounted `RitmusProvider` in `MaterialApp.builder`, no
+  /// host app has mounted `UserGistProvider` in `MaterialApp.builder`, no
   /// further wiring is required.
   static void openRequestsBoard() {
     RequestsNav.board();
@@ -295,7 +295,7 @@ class Ritmus {
       throw ArgumentError('description required, max 1500 chars');
     }
     final core = _core;
-    if (core == null) throw StateError('Ritmus.start() has not run');
+    if (core == null) throw StateError('UserGist.start() has not run');
     final result = await core.requestsApi.submit(
       anonymousId: core.identity.anonymousId,
       externalId: core.identity.externalId,
@@ -340,7 +340,7 @@ class Ritmus {
     required bool vote,
   }) async {
     final core = _core;
-    if (core == null) throw StateError('Ritmus.start() has not run');
+    if (core == null) throw StateError('UserGist.start() has not run');
     final rollback = core.requestsCache.applyOptimisticVote(requestId, vote);
     final outcome = await core.requestsApi.vote(
       requestId: requestId,
@@ -363,7 +363,7 @@ class Ritmus {
     required bool follow,
   }) async {
     final core = _core;
-    if (core == null) throw StateError('Ritmus.start() has not run');
+    if (core == null) throw StateError('UserGist.start() has not run');
     final rollback = core.requestsCache.applyOptimisticFollow(requestId, follow);
     final outcome = await core.requestsApi.follow(
       requestId: requestId,
@@ -402,7 +402,7 @@ class Ritmus {
       throw ArgumentError('comment body required, max 1000 chars');
     }
     final core = _core;
-    if (core == null) throw StateError('Ritmus.start() has not run');
+    if (core == null) throw StateError('UserGist.start() has not run');
     return core.requestsApi.postComment(
       requestId: requestId,
       anonymousId: core.identity.anonymousId,
@@ -421,7 +421,7 @@ class Ritmus {
       throw ArgumentError('comment body required, max 1000 chars');
     }
     final core = _core;
-    if (core == null) throw StateError('Ritmus.start() has not run');
+    if (core == null) throw StateError('UserGist.start() has not run');
     return core.requestsApi.editComment(
       requestId: requestId,
       commentId: commentId,

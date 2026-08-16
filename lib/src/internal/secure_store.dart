@@ -24,7 +24,7 @@ class SecureKeyValueStore implements KeyValueStore {
     required String writeKey,
     required KeyValueStore legacy,
     FlutterSecureStorage? backend,
-  })  : _prefix = 'ritmus.${shortHash(writeKey)}.secure.',
+  })  : _prefix = 'usergist.${shortHash(writeKey)}.secure.',
         _legacy = legacy,
         _backend = backend ?? const FlutterSecureStorage(
           aOptions: AndroidOptions(encryptedSharedPreferences: true),

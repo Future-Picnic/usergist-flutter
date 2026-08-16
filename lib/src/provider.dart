@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import 'ritmus.dart';
+import 'usergist.dart';
 import 'ui/prompt_presenter.dart';
 import 'ui/requests_host.dart';
 
-/// Mounts the Ritmus prompt presenter on top of the host app's
+/// Mounts the UserGist prompt presenter on top of the host app's
 /// navigator so prompts can render as modal bottom sheets over the
 /// current screen.
 ///
@@ -14,16 +14,16 @@ import 'ui/requests_host.dart';
 ///
 /// ```dart
 /// MaterialApp(
-///   builder: (ctx, child) => RitmusProvider(child: child!),
+///   builder: (ctx, child) => UserGistProvider(child: child!),
 ///   home: const HomeScreen(),
 /// )
 /// ```
 ///
 /// Placing it this way ensures there is a [Navigator] ancestor so the
 /// SDK can call `showModalBottomSheet` against the caller's navigator.
-class RitmusProvider extends StatefulWidget {
+class UserGistProvider extends StatefulWidget {
   /// Creates a provider.
-  const RitmusProvider({
+  const UserGistProvider({
     required this.child,
     super.key,
   });
@@ -32,20 +32,20 @@ class RitmusProvider extends StatefulWidget {
   final Widget child;
 
   @override
-  State<RitmusProvider> createState() => _RitmusProviderState();
+  State<UserGistProvider> createState() => _UserGistProviderState();
 }
 
-class _RitmusProviderState extends State<RitmusProvider> {
+class _UserGistProviderState extends State<UserGistProvider> {
   late final PromptPresenter _presenter;
 
   @override
   void initState() {
     super.initState();
     _presenter = PromptPresenter(
-      stream: Ritmus.internalShowStream,
-      onShown: Ritmus.internalReportShown,
-      onResponded: Ritmus.internalReportResponse,
-      themeOverrides: Ritmus.internalThemeOverrides,
+      stream: UserGist.internalShowStream,
+      onShown: UserGist.internalReportShown,
+      onResponded: UserGist.internalReportResponse,
+      themeOverrides: UserGist.internalThemeOverrides,
     );
   }
 
@@ -64,7 +64,7 @@ class _RitmusProviderState extends State<RitmusProvider> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _presenter
-            ..updateThemeOverrides(Ritmus.internalThemeOverrides)
+            ..updateThemeOverrides(UserGist.internalThemeOverrides)
             ..attach(innerCtx);
         });
         return Stack(

@@ -5,9 +5,9 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ritmus_feedback/src/internal/requests/debounced_search.dart';
-import 'package:ritmus_feedback/src/internal/requests/requests_cache.dart';
-import 'package:ritmus_feedback/src/models/request.dart';
+import 'package:usergist_feedback/src/internal/requests/debounced_search.dart';
+import 'package:usergist_feedback/src/internal/requests/requests_cache.dart';
+import 'package:usergist_feedback/src/models/request.dart';
 
 FeatureRequest mkRequest({
   String id = 'r1',

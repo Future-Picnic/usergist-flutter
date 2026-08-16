@@ -25,7 +25,7 @@ abstract class KeyValueStore {
 class SharedPrefsStore implements KeyValueStore {
   /// Creates a store namespaced to [writeKey].
   SharedPrefsStore({required String writeKey})
-      : _prefix = 'ritmus.${shortHash(writeKey)}.';
+      : _prefix = 'usergist.${shortHash(writeKey)}.';
 
   final String _prefix;
   SharedPreferences? _prefs;
@@ -74,9 +74,9 @@ class SharedPrefsStore implements KeyValueStore {
 
 /// Returns the per-writeKey application-support directory used for
 /// heavier persistent artifacts (event queue, cached triggers).
-Future<Directory> ritmusSupportDir(String writeKey) async {
+Future<Directory> usergistSupportDir(String writeKey) async {
   final base = await getApplicationSupportDirectory();
-  final dir = Directory('${base.path}/ritmus/${shortHash(writeKey)}');
+  final dir = Directory('${base.path}/usergist/${shortHash(writeKey)}');
   if (!await dir.exists()) {
     await dir.create(recursive: true);
   }

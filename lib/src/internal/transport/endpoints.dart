@@ -54,10 +54,10 @@ class DefaultApiUrls {
   DefaultApiUrls._();
 
   /// Production API.
-  static const String production = 'https://api.ritmus.studio';
+  static const String production = 'https://api.usergist.studio';
 
   /// Staging API.
-  static const String staging = 'https://staging.api.ritmus.studio';
+  static const String staging = 'https://staging.api.usergist.studio';
 
   /// Development API (local or dev cluster).
   static const String development = 'http://localhost:3000';

@@ -1,18 +1,18 @@
 /// Drop-in Flutter UI for the Feature Requests pillar.
 ///
-/// Host apps mount `RitmusProvider` (which is mounted in `MaterialApp.builder`).
-/// `Ritmus.openRequestsBoard()` then pushes a route onto the host's
+/// Host apps mount `UserGistProvider` (which is mounted in `MaterialApp.builder`).
+/// `UserGist.openRequestsBoard()` then pushes a route onto the host's
 /// Navigator — no host-side UI work required.
 import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../internal/requests/requests_api.dart';
 import '../models/request.dart';
-import '../ritmus.dart';
+import '../usergist.dart';
 
 const Color _fallbackAccent = Color(0xFF5B4BFF);
 
-/// Stream events emitted by `Ritmus.openRequestsBoard` / `openRequestDetail`.
+/// Stream events emitted by `UserGist.openRequestsBoard` / `openRequestDetail`.
 /// The provider listens and pushes the appropriate route.
 class RequestsNav {
   RequestsNav._();
@@ -39,7 +39,7 @@ class _DetailEvent extends _NavEvent {
   final String requestId;
 }
 
-/// Mount inside `RitmusProvider` to wire up the requests UI.
+/// Mount inside `UserGistProvider` to wire up the requests UI.
 class RequestsNavHost extends StatefulWidget {
   const RequestsNavHost({super.key});
 
@@ -59,7 +59,7 @@ class _RequestsNavHostState extends State<RequestsNavHost> {
   }
 
   Future<void> _loadBranding() async {
-    final b = await Ritmus.getRequestBranding();
+    final b = await UserGist.getRequestBranding();
     if (!mounted || b == null) return;
     setState(() => _branding = _Branding.fromApi(b));
   }
@@ -194,7 +194,7 @@ class _BoardScreenState extends State<_BoardScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final r = await Ritmus.getRequests(
+    final r = await UserGist.getRequests(
       options: const GetRequestsOptions(sort: RequestSort.top, limit: 50),
     );
     if (!mounted) return;
@@ -212,7 +212,7 @@ class _BoardScreenState extends State<_BoardScreen> {
           .toList(growable: false);
     });
     try {
-      await Ritmus.voteOnRequest(item.id, vote: next);
+      await UserGist.voteOnRequest(item.id, vote: next);
     } catch (_) {
       unawaited(_load());
     }
@@ -479,8 +479,8 @@ class _DetailScreenState extends State<_DetailScreen> {
 
   Future<void> _load() async {
     final results = await Future.wait<Object?>([
-      Ritmus.getRequest(widget.requestId),
-      Ritmus.getComments(widget.requestId),
+      UserGist.getRequest(widget.requestId),
+      UserGist.getComments(widget.requestId),
     ]);
     if (!mounted) return;
     setState(() {
@@ -498,7 +498,7 @@ class _DetailScreenState extends State<_DetailScreen> {
       _data = _vote(data, next);
     });
     try {
-      await Ritmus.voteOnRequest(data.id, vote: next);
+      await UserGist.voteOnRequest(data.id, vote: next);
     } catch (_) {
       unawaited(_load());
     }
@@ -512,7 +512,7 @@ class _DetailScreenState extends State<_DetailScreen> {
       _data = _follow(data, next);
     });
     try {
-      await Ritmus.followRequest(data.id, follow: next);
+      await UserGist.followRequest(data.id, follow: next);
     } catch (_) {
       unawaited(_load());
     }
@@ -523,7 +523,7 @@ class _DetailScreenState extends State<_DetailScreen> {
     if (body.isEmpty || body.length > 1000) return;
     setState(() => _posting = true);
     try {
-      final c = await Ritmus.postComment(widget.requestId, body);
+      final c = await UserGist.postComment(widget.requestId, body);
       if (c != null && mounted) {
         setState(() {
           _comments = [..._comments, c];
@@ -915,7 +915,7 @@ class _SubmitScreenState extends State<_SubmitScreen> {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
     try {
-      final created = await Ritmus.submitRequest(
+      final created = await UserGist.submitRequest(
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
       );

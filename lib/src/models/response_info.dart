@@ -17,7 +17,7 @@ class ResponseAnswer {
 }
 
 /// Public stream event emitted when the user responds (or dismisses)
-/// a prompt. See [Ritmus.onResponse].
+/// a prompt. See [UserGist.onResponse].
 class PromptResponseInfo {
   /// Creates a response-info record.
   const PromptResponseInfo({

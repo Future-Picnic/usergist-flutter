@@ -1,4 +1,4 @@
-// PORTED FROM: packages/sdk-react-native/src/Ritmus.ts (requests methods)
+// PORTED FROM: packages/sdk-react-native/src/UserGist.ts (requests methods)
 //
 // HTTP wiring for the Feature Requests pillar. Maps directly to the
 // endpoints declared in packages/sdk-core/src/contract/endpoints.ts.

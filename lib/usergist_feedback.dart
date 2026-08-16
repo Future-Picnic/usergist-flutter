@@ -1,14 +1,14 @@
-/// Ritmus mobile feedback SDK for Flutter.
+/// UserGist mobile feedback SDK for Flutter.
 ///
 /// Public entrypoint. Import as:
 ///
 /// ```dart
-/// import 'package:ritmus_feedback/ritmus_feedback.dart';
+/// import 'package:usergist_feedback/usergist_feedback.dart';
 /// ```
 library;
 
-export 'src/ritmus.dart' show Ritmus, RitmusEnvironment;
-export 'src/provider.dart' show RitmusProvider;
+export 'src/usergist.dart' show UserGist, UserGistEnvironment;
+export 'src/provider.dart' show UserGistProvider;
 export 'src/models/consent.dart' show Consent;
 export 'src/models/theme.dart' show PromptTheme, PromptThemeColors;
 export 'src/models/question.dart'
@@ -24,7 +24,7 @@ export 'src/models/response_info.dart'
     show PromptResponseInfo, ResponseAnswer, AnswerValue;
 export 'src/models/prompt.dart' show ClientPrompt, ArmedTrigger, FrequencyCaps;
 export 'src/push/push.dart'
-    show Push, PushHandlers, RitmusPushMessage, PushPermissionStatus;
+    show Push, PushHandlers, UserGistPushMessage, PushPermissionStatus;
 export 'src/models/survey.dart' show SurveySummary, SurveyHandlers;
 export 'src/models/request.dart'
     show

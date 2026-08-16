@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ritmus_feedback/src/internal/storage.dart';
-import 'package:ritmus_feedback/src/internal/triggers/frequency_cap.dart';
-import 'package:ritmus_feedback/src/models/prompt.dart';
+import 'package:usergist_feedback/src/internal/storage.dart';
+import 'package:usergist_feedback/src/internal/triggers/frequency_cap.dart';
+import 'package:usergist_feedback/src/models/prompt.dart';
 
 class _InMemoryStore implements KeyValueStore {
   final Map<String, String> _data = <String, String>{};

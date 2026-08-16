@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ritmus_feedback/src/internal/transport/retry_policy.dart';
+import 'package:usergist_feedback/src/internal/transport/retry_policy.dart';
 
 void main() {
   test('isRetryable flags 5xx / 429 / 408', () {

@@ -28,13 +28,13 @@ import 'triggers/segment_evaluator.dart';
 import 'triggers/trigger_matcher.dart';
 
 /// The actual implementation of the SDK. Owns all internal state and
-/// is the singleton instance that [Ritmus] delegates to.
+/// is the singleton instance that [UserGist] delegates to.
 ///
 /// This class is deliberately library-internal (exported only through
-/// `ritmus_feedback/src/...`). Do not import directly from apps.
-class RitmusCore {
+/// `usergist_feedback/src/...`). Do not import directly from apps.
+class UserGistCore {
   /// Creates a core instance. Call [start] before using it.
-  RitmusCore({
+  UserGistCore({
     required this.writeKey,
     required this.baseUrl,
     required this.sdkVersion,
@@ -140,7 +140,7 @@ class RitmusCore {
       _freqCaps.hydrate(),
     ]);
 
-    final dir = await ritmusSupportDir(writeKey);
+    final dir = await usergistSupportDir(writeKey);
     _queue = EventQueue(
       file: File('${dir.path}/queue.jsonl'),
       maxSize: maxQueueSize,

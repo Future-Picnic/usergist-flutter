@@ -1,8 +1,8 @@
-name: ritmus_feedback
-description: Ritmus mobile feedback SDK for Flutter. Lightweight, GDPR-aware, offline-first event ingest and native prompt rendering.
+name: usergist_feedback
+description: userGist mobile feedback SDK for Flutter. Lightweight, GDPR-aware, offline-first event ingest and native prompt rendering.
 version: 0.1.0
-homepage: https://ritmus.studio
-repository: https://github.com/ritmus-studio/ritmus-feedback
+homepage: https://usergist.studio
+repository: https://github.com/FuturePicnic/usergist
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

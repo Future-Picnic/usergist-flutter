@@ -4,8 +4,8 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:ritmus_feedback/src/internal/transport/api_client.dart';
-import 'package:ritmus_feedback/src/internal/transport/retry_policy.dart';
+import 'package:usergist_feedback/src/internal/transport/api_client.dart';
+import 'package:usergist_feedback/src/internal/transport/retry_policy.dart';
 
 void main() {
   test('postJson sends auth + payload and decodes a 200 response',
@@ -38,7 +38,7 @@ void main() {
     expect(sent.method, 'POST');
     expect(sent.url.toString(), 'https://api.test/v1/sdk/ingest');
     expect(sent.headers['authorization'], 'Bearer wk_abc');
-    expect(sent.headers['x-ritmus-sdk'], 'flutter/0.1.0');
+    expect(sent.headers['x-usergist-sdk'], 'flutter/0.1.0');
   });
 
   test('retries on 500 and eventually succeeds', () async {

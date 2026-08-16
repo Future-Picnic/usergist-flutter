@@ -6,7 +6,7 @@ import '../models/theme.dart';
 /// layering (in order):
 ///   1. the host app's [Theme];
 ///   2. the server-shipped prompt theme;
-///   3. the SDK caller's [Ritmus.setThemeOverrides] payload.
+///   3. the SDK caller's [UserGist.setThemeOverrides] payload.
 class ResolvedPromptTheme {
   /// Creates a resolved theme.
   const ResolvedPromptTheme({
