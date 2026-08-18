@@ -60,5 +60,5 @@ class DefaultApiUrls {
   static const String staging = 'https://staging.api.usergist.studio';
 
   /// Development API (local or dev cluster).
-  static const String development = 'http://localhost:3000';
+  static const String development = 'http://localhost:28743';
 }

@@ -1,9 +1,12 @@
 # usergist_feedback
 
-Flutter SDK for [userGist](https://usergist.studio) — a mobile feedback tool.
+Experimental Flutter SDK for [userGist](https://usergist.studio). This package
+is not launch-supported until authenticated subject sessions, durable server
+instructions, and release-build verification are complete.
 
-Offline-first event ingest, GDPR consent gating, client-side trigger
-evaluation, and native bottom-sheet prompt rendering with themeable UI.
+The current package contains offline event ingest, consent gating, local rule
+evaluation, and a themeable prompt renderer. Do not assume React Native API or
+security parity; consult `packages/PARITY.md` before integration.
 
 ## Install
 
