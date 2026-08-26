@@ -24,8 +24,7 @@ class ExampleApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      builder: (ctx, child) => UserGistProvider(child: child!),
-      home: const _HomeScreen(),
+      home: const UserGistProvider(child: _HomeScreen()),
     );
   }
 }
@@ -66,14 +65,14 @@ class _HomeScreenState extends State<_HomeScreen> {
               child: const Text(r'Track "checkout_completed"'),
             ),
             const SizedBox(height: 8),
-            ElevatedButton(
+            const ElevatedButton(
               onPressed: UserGist.flush,
-              child: const Text('Flush now'),
+              child: Text('Flush now'),
             ),
             const SizedBox(height: 8),
-            ElevatedButton(
+            const ElevatedButton(
               onPressed: UserGist.reset,
-              child: const Text('Reset'),
+              child: Text('Reset'),
             ),
           ],
         ),
@@ -87,9 +86,17 @@ class _HomeScreenState extends State<_HomeScreen> {
   }
 
   Future<void> _identify() async {
+    const subjectToken = String.fromEnvironment('USERGIST_SUBJECT_TOKEN');
+    if (subjectToken.isEmpty) {
+      setState(
+        () => _status = 'mint USERGIST_SUBJECT_TOKEN on your backend first',
+      );
+      return;
+    }
     await UserGist.identify(
       'user_123',
       properties: <String, Object?>{'plan': 'pro'},
+      subjectToken: subjectToken,
     );
     setState(() => _status = 'identified as user_123');
   }

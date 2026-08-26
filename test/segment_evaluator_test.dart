@@ -21,7 +21,7 @@ void main() {
   });
 
   test('user_property eq matches', () {
-    final rules = SerializedSegmentRules(
+    const rules = SerializedSegmentRules(
       userProperties: <UserPropertyRule>[
         UserPropertyRule(
           key: 'plan',
@@ -47,12 +47,12 @@ void main() {
   });
 
   test('user_property in list matches', () {
-    final rules = SerializedSegmentRules(
+    const rules = SerializedSegmentRules(
       userProperties: <UserPropertyRule>[
         UserPropertyRule(
           key: 'country',
           op: UserPropertyOp.inList,
-          value: const <Object?>['DE', 'FR'],
+          value: <Object?>['DE', 'FR'],
         ),
       ],
     );
@@ -101,7 +101,7 @@ void main() {
   });
 
   test('event_count gte matches', () {
-    final rules = SerializedSegmentRules(
+    const rules = SerializedSegmentRules(
       eventCounts: <EventCountRule>[
         EventCountRule(
           eventName: 'login',
@@ -114,7 +114,7 @@ void main() {
     expect(
       evaluateSerializedSegmentRules(
         rules,
-        UserState(
+        const UserState(
           eventCounts: <String, Map<int, int>>{
             'login': <int, int>{7: 5},
           },
@@ -125,7 +125,7 @@ void main() {
     expect(
       evaluateSerializedSegmentRules(
         rules,
-        UserState(
+        const UserState(
           eventCounts: <String, Map<int, int>>{
             'login': <int, int>{7: 2},
           },
@@ -136,7 +136,7 @@ void main() {
   });
 
   test('combined predicates use implicit AND', () {
-    final rules = SerializedSegmentRules(
+    const rules = SerializedSegmentRules(
       userProperties: <UserPropertyRule>[
         UserPropertyRule(
           key: 'plan',
@@ -156,8 +156,8 @@ void main() {
     expect(
       evaluateSerializedSegmentRules(
         rules,
-        UserState(
-          properties: const <String, Object?>{'plan': 'pro'},
+        const UserState(
+          properties: <String, Object?>{'plan': 'pro'},
           eventCounts: <String, Map<int, int>>{
             'login': <int, int>{30: 3},
           },
@@ -168,8 +168,8 @@ void main() {
     expect(
       evaluateSerializedSegmentRules(
         rules,
-        UserState(
-          properties: const <String, Object?>{'plan': 'pro'},
+        const UserState(
+          properties: <String, Object?>{'plan': 'pro'},
           eventCounts: <String, Map<int, int>>{
             'login': <int, int>{30: 0},
           },

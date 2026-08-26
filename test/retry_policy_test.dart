@@ -46,7 +46,6 @@ void main() {
     final rp = RetryPolicy(
       baseDelayMs: 1000,
       maxDelayMs: 10000,
-      jitter: 0.25,
       random: Random(7),
     );
     for (var i = 0; i < 20; i++) {

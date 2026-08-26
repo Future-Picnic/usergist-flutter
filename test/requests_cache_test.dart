@@ -56,8 +56,11 @@ void main() {
       expect(after.upvoteCount, 9);
       expect(after.followerCount, 4, reason: 'follower count must stay put');
       expect(after.viewerHasUpvoted, false);
-      expect(after.viewerIsFollowing, true,
-          reason: 'follow must NOT be removed by un-upvote');
+      expect(
+        after.viewerIsFollowing,
+        true,
+        reason: 'follow must NOT be removed by un-upvote',
+      );
     });
 
     test('rollback restores the captured snapshot', () {

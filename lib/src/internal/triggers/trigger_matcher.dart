@@ -28,6 +28,10 @@ class TriggerMatcher {
     final candidates = rulesCache.forEvent(eventName);
     if (candidates.isEmpty) return null;
     for (final trigger in candidates) {
+      if (trigger.clientSideEligible == false) {
+        log.d('server-authoritative trigger skipped: ${trigger.promptId}');
+        continue;
+      }
       final segOk = evaluateSerializedSegmentRules(
         trigger.segmentRules,
         userState,

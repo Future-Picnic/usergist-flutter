@@ -14,7 +14,8 @@ class RulesCache {
   final File _file;
 
   List<ArmedTrigger> _triggers = const <ArmedTrigger>[];
-  Map<String, List<ArmedTrigger>> _byEvent = const <String, List<ArmedTrigger>>{};
+  Map<String, List<ArmedTrigger>> _byEvent =
+      const <String, List<ArmedTrigger>>{};
 
   /// Current triggers (read-only snapshot).
   List<ArmedTrigger> get all => _triggers;

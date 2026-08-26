@@ -32,7 +32,10 @@ void main() {
     }
     expect(q.length, 5);
     final head = q.peek(3);
-    expect(head.map((e) => e.name).toList(), <String>['evt_0', 'evt_1', 'evt_2']);
+    expect(
+      head.map((e) => e.name).toList(),
+      <String>['evt_0', 'evt_1', 'evt_2'],
+    );
   });
 
   test('drop removes from the head', () async {
@@ -55,8 +58,10 @@ void main() {
     expect(q.length, 3);
     expect(q.droppedCount, 2);
     final rest = q.peek(10);
-    expect(rest.map((e) => e.name).toList(),
-        <String>['evt_2', 'evt_3', 'evt_4']);
+    expect(
+      rest.map((e) => e.name).toList(),
+      <String>['evt_2', 'evt_3', 'evt_4'],
+    );
   });
 
   test('persistence survives a restart', () async {
@@ -69,8 +74,10 @@ void main() {
     final second = EventQueue(file: file, maxSize: 10);
     await second.hydrate();
     expect(second.length, 2);
-    expect(second.peek(2).map((e) => e.name).toList(),
-        <String>['evt_1', 'evt_2']);
+    expect(
+      second.peek(2).map((e) => e.name).toList(),
+      <String>['evt_1', 'evt_2'],
+    );
   });
 
   test('clear empties the queue and the file', () async {
@@ -89,7 +96,7 @@ void main() {
     await q.hydrate();
     await q.append(mkEvent(1));
     final lines = (await file.readAsString()).split('\n');
-    expect(lines.first, '{"version":1}');
+    expect(lines.first, '{"version":2}');
   });
 
   test('hydrates legacy bare-line snapshots and rewrites with header',
@@ -108,11 +115,10 @@ void main() {
     // Force a rewrite — next persist should emit the header.
     await q.append(mkEvent(99));
     final lines = (await file.readAsString()).split('\n');
-    expect(lines.first, '{"version":1}');
+    expect(lines.first, '{"version":2}');
   });
 
-  test('discards persisted snapshots from an unknown schema version',
-      () async {
+  test('discards persisted snapshots from an unknown schema version', () async {
     final file = File('${tmp.path}/q.jsonl');
     await file.writeAsString(
       '{"version":999}\n{"name":"x","timestamp":"2026-01-01T00:00:00.000Z","anonymousId":"a"}\n',

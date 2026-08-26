@@ -42,8 +42,8 @@ class _ShortTextQuestionViewState extends State<ShortTextQuestionView> {
       controller: _ctrl,
       onChanged: widget.onChanged,
       maxLength: widget.question.maxLength,
-      maxLines: 4,
-      minLines: 2,
+      maxLines: 6,
+      minLines: 4,
       style: TextStyle(
         color: theme.text,
         fontFamily: theme.fontFamily,
@@ -51,8 +51,8 @@ class _ShortTextQuestionViewState extends State<ShortTextQuestionView> {
       decoration: InputDecoration(
         hintText: widget.question.placeholder,
         hintStyle: TextStyle(color: theme.subtext),
-        filled: true,
-        fillColor: theme.background,
+        counterText: '',
+        contentPadding: const EdgeInsets.all(12),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: theme.border),

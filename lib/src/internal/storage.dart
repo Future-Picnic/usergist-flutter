@@ -53,11 +53,19 @@ class SharedPrefsStore implements KeyValueStore {
 
   @override
   Future<void> writeString(String key, String value) async {
+    await writeStringStrict(key, value);
+  }
+
+  /// Persists [value] and reports whether the write reached the backing
+  /// preferences store. Durable inbox cursors must not be acknowledged when
+  /// this returns false.
+  Future<bool> writeStringStrict(String key, String value) async {
     try {
       final p = await _instance();
-      await p.setString(_k(key), value);
+      return await p.setString(_k(key), value);
     } on Object catch (err, st) {
       log.e('prefs write failed', err, st);
+      return false;
     }
   }
 

@@ -87,7 +87,8 @@ class RequestsApi {
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
     };
-    final res = await _api.getJson(SdkEndpoints.request(requestId), query: query);
+    final res =
+        await _api.getJson(SdkEndpoints.request(requestId), query: query);
     if (!res.success || res.data == null) return null;
     return _decodeRequest(res.data!);
   }
@@ -143,7 +144,8 @@ class RequestsApi {
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       'follow': follow,
     };
-    final res = await _api.postJson(SdkEndpoints.requestFollow(requestId), body);
+    final res =
+        await _api.postJson(SdkEndpoints.requestFollow(requestId), body);
     if (!res.success || res.data == null) return null;
     final d = res.data!;
     final sourceRaw = (d['source'] as String?) ?? 'manual';
@@ -168,8 +170,10 @@ class RequestsApi {
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
     };
-    final res = await _api.getJson(SdkEndpoints.requestComments(requestId),
-        query: query);
+    final res = await _api.getJson(
+      SdkEndpoints.requestComments(requestId),
+      query: query,
+    );
     if (!res.success || res.data == null) return const [];
     final items = (res.data!['items'] as List?) ?? const <Object?>[];
     return items

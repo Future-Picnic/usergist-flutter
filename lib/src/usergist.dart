@@ -6,11 +6,15 @@ import 'internal/requests/requests_api.dart';
 import 'internal/transport/endpoints.dart';
 import 'ui/requests_host.dart';
 import 'models/consent.dart';
+import 'models/diagnostic.dart';
+import 'models/inapp_message.dart';
 import 'models/request.dart';
 import 'models/response_info.dart';
 import 'models/survey.dart';
 import 'models/theme.dart';
 import 'ui/prompt_presenter.dart';
+import 'ui/inapp_presenter.dart';
+import 'ui/survey_presenter.dart';
 
 /// Deployment environment enum. Maps to a default base URL.
 enum UserGistEnvironment {
@@ -61,7 +65,8 @@ class UserGist {
         return;
       }
       log.setDebug(debug);
-      final core = UserGistCore(
+      late final UserGistCore core;
+      core = UserGistCore(
         writeKey: writeKey,
         baseUrl: apiUrl ?? environment.defaultUrl,
         sdkVersion: sdkVersion,
@@ -69,6 +74,26 @@ class UserGist {
         flushBatchSize: flushBatchSize,
         maxQueueSize: maxQueueSize,
         triggerSyncInterval: triggerSyncInterval,
+        onSurveyInvite: (summary) {
+          final invite = surveyHandlers.onInvite;
+          if (invite != null) {
+            try {
+              invite(summary);
+            } on Object catch (error, stack) {
+              core.releaseSurveyReservation(summary.id);
+              log.e('survey invite handler failed', error, stack);
+            }
+          } else {
+            unawaited(
+              core
+                  .openSurvey(summary.id, source: summary.source)
+                  .catchError((Object error, StackTrace stack) {
+                core.releaseSurveyReservation(summary.id);
+                log.e('triggered survey open failed', error, stack);
+              }),
+            );
+          }
+        },
       );
       await core.start();
       _core = core;
@@ -82,11 +107,12 @@ class UserGist {
   static Future<void> identify(
     String userId, {
     Map<String, Object?>? properties,
+    required String subjectToken,
   }) async {
     try {
       final core = _core;
       if (core == null) return;
-      await core.identify(userId, properties);
+      await core.identify(userId, properties, subjectToken);
     } on Object catch (err, st) {
       log.e('identify failed', err, st);
     }
@@ -106,8 +132,7 @@ class UserGist {
     }
   }
 
-  /// Sets consent. Transport is blocked until feedback consent is
-  /// granted.
+  /// Sets consent. Transport is blocked until at least one purpose is granted.
   static Future<void> setConsent(Consent purposes) async {
     try {
       final core = _core;
@@ -142,6 +167,72 @@ class UserGist {
       await core.invalidatePushToken(token);
     } on Object catch (err, st) {
       log.e('invalidatePushToken failed', err, st);
+    }
+  }
+
+  /// Rebinds the last successfully registered token to an identified user.
+  static Future<void> rebindPushToken(String externalId) async {
+    try {
+      await _core?.rebindPushToken(externalId);
+    } on Object catch (err, st) {
+      log.e('rebindPushToken failed', err, st);
+    }
+  }
+
+  /// Sends a delivered/displayed/dismissed push receipt beacon.
+  static Future<void> pushBeacon(
+    String kind,
+    String deliveryId, {
+    String? actionButton,
+  }) async {
+    try {
+      await _core?.pushBeacon(
+        kind,
+        deliveryId,
+        actionButton: actionButton,
+      );
+    } on Object catch (err, st) {
+      log.e('pushBeacon failed', err, st);
+    }
+  }
+
+  /// Acknowledges a silent reachability ping.
+  static Future<void> pushAckSilent(String pingId) async {
+    try {
+      await _core?.pushAckSilent(pingId);
+    } on Object catch (err, st) {
+      log.e('pushAckSilent failed', err, st);
+    }
+  }
+
+  /// Records an application-open reachability beacon.
+  static Future<void> pushAppOpen() async {
+    try {
+      await _core?.pushAppOpen();
+    } on Object catch (err, st) {
+      log.e('pushAppOpen failed', err, st);
+    }
+  }
+
+  /// Fetches the remote push-channel registry.
+  static Future<List<Map<String, Object?>>> pushFetchChannels() async {
+    try {
+      return await _core?.pushFetchChannels() ?? const <Map<String, Object?>>[];
+    } on Object catch (err, st) {
+      log.e('pushFetchChannels failed', err, st);
+      return const <Map<String, Object?>>[];
+    }
+  }
+
+  /// Updates a user-owned channel subscription.
+  static Future<void> pushSetChannelSubscription(
+    String channelId,
+    bool subscribed,
+  ) async {
+    try {
+      await _core?.pushSetChannelSubscription(channelId, subscribed);
+    } on Object catch (err, st) {
+      log.e('pushSetChannelSubscription failed', err, st);
     }
   }
 
@@ -184,6 +275,13 @@ class UserGist {
     log.setDebug(enabled);
   }
 
+  /// Receives bounded, non-throwing SDK diagnostics in production.
+  static void setDiagnosticHandler(
+    void Function(SdkDiagnostic diagnostic)? handler,
+  ) {
+    log.setDiagnosticHandler(handler);
+  }
+
   /// Current anonymous identifier (empty string before [init]).
   static String get anonymousId => _core?.identity.anonymousId ?? '';
 
@@ -211,39 +309,129 @@ class UserGist {
     _core?.reportShown(promptId);
   }
 
+  static void internalReportPromptPresentationFailed(String promptId) {
+    _core?.releasePromptReservation(promptId);
+  }
+
   /// Internal: current theme overrides.
   static PromptTheme? get internalThemeOverrides => _core?.themeOverrides;
+
+  /// Internal: authenticated in-app messages routed to the UI provider.
+  static Stream<InAppShowRequest> get internalInAppShowStream =>
+      _core?.inAppShowRequests ?? const Stream<InAppShowRequest>.empty();
+
+  /// Internal: fetched survey attempts routed to the native provider.
+  static Stream<SurveyShowRequest> get internalSurveyShowStream =>
+      _core?.surveyShowRequests ?? const Stream<SurveyShowRequest>.empty();
+
+  /// Internal: tells the mounted provider to close SDK-owned routes on reset.
+  static Stream<void> get internalResetStream =>
+      _core?.resetRequests ?? const Stream<void>.empty();
+
+  /// Internal: reports that an in-app message reached the screen.
+  static void internalReportInAppShown(String messageId) {
+    _core?.reportInAppShown(messageId);
+    inAppHandlers.onShow?.call(messageId);
+  }
+
+  /// Internal: reports user or timer dismissal.
+  static void internalReportInAppDismissed(String messageId, String reason) {
+    _core?.reportInAppDismissed(messageId, reason);
+    inAppHandlers.onDismiss?.call(messageId, reason);
+  }
+
+  /// Internal: reports a CTA click and its action metadata.
+  static void internalReportInAppCta(
+    String messageId,
+    InAppCta cta,
+    int index,
+  ) {
+    _core?.reportInAppCta(messageId, cta, index);
+    inAppHandlers.onCtaClick?.call(
+      InAppCtaClick(
+        messageId: messageId,
+        action: cta.action,
+        target: cta.target,
+        label: cta.label,
+        index: index,
+      ),
+    );
+  }
+
+  static Future<void> internalSaveSurveyProgress(
+    String attemptId,
+    String? currentQuestionId,
+    Map<String, Object?> answers,
+  ) async {
+    await _core?.saveSurveyProgress(attemptId, currentQuestionId, answers);
+  }
+
+  static Future<bool> internalCompleteSurvey(
+    String attemptId,
+    Map<String, Object?> answers,
+  ) async =>
+      await _core?.completeSurvey(attemptId, answers) ?? false;
+
+  static Future<bool> internalAbandonSurvey(String attemptId) async =>
+      await _core?.abandonSurvey(attemptId) ?? false;
+
+  static void internalReportSurveyShown(String surveyId) {
+    _core?.reportSurveyShown(surveyId);
+    surveyHandlers.onShow?.call(surveyId);
+  }
+
+  static void internalReportSurveyPresentationFailed(String surveyId) {
+    _core?.releaseSurveyReservation(surveyId);
+  }
+
+  static void internalReportSurveyComplete(String surveyId, String attemptId) {
+    surveyHandlers.onComplete?.call(surveyId, attemptId);
+  }
+
+  static void internalReportSurveyAbandon(String surveyId, String attemptId) {
+    surveyHandlers.onAbandon?.call(surveyId, attemptId);
+  }
 
   // ---------------- Surveys ----------------
 
   /// Host-app survey lifecycle handlers. Set before calling [openSurvey].
   static SurveyHandlers surveyHandlers = const SurveyHandlers();
 
-  /// Returns the list of surveys currently open to this user. v1 surface:
-  /// consent-gated scaffold — the full native multi-step renderer is a
-  /// follow-up release. Returns an empty list today.
+  /// Replaces the lifecycle callbacks for SDK-rendered surveys.
+  static void setSurveyHandlers(SurveyHandlers handlers) {
+    surveyHandlers = handlers;
+  }
+
+  /// Optional lifecycle handlers for SDK-rendered in-app messages.
+  static InAppHandlers inAppHandlers = const InAppHandlers();
+
+  /// Replaces the current in-app lifecycle handler set.
+  static void setInAppHandlers(InAppHandlers handlers) {
+    inAppHandlers = handlers;
+  }
+
+  /// Returns the list of surveys currently open to this user.
   static Future<List<SurveySummary>> getAvailableSurveys() async {
     try {
       final core = _core;
       if (core == null) return const <SurveySummary>[];
       if (core.consent.allowsSurvey != true) return const <SurveySummary>[];
-      // v2: GET /v1/sdk/surveys/available once the renderer ships.
-      return const <SurveySummary>[];
+      return core.getAvailableSurveys();
     } on Object catch (err, st) {
       log.e('getAvailableSurveys failed', err, st);
       return const <SurveySummary>[];
     }
   }
 
-  /// Requests that the host app render the specified survey. The SDK
-  /// notifies the host via [SurveyHandlers.onShow].
-  static void openSurvey(String surveyId, {String? language}) {
+  /// Fetches and presents a specific survey using the native renderer.
+  static Future<void> openSurvey(String surveyId, {String? language}) async {
     try {
       final core = _core;
       if (core == null) return;
       if (core.consent.allowsSurvey != true) return;
-      surveyHandlers.onShow?.call(surveyId);
+      await core.openSurvey(surveyId, language: language);
     } on Object catch (err, st) {
+      _core?.releaseSurveyReservation(surveyId);
       log.e('openSurvey failed', err, st);
     }
   }
@@ -253,11 +441,20 @@ class UserGist {
   static bool handleSurveyDeepLink(Uri uri) {
     try {
       final segments = uri.pathSegments;
-      final pathToken = (segments.length >= 2 && segments[0] == 's') ? segments[1] : null;
+      final pathToken =
+          (segments.length >= 2 && segments[0] == 's') ? segments[1] : null;
       final queryToken = uri.queryParameters['survey'];
       final token = pathToken ?? queryToken;
       if (token == null || token.isEmpty) return false;
-      log.d('survey.deep-link token=${token.substring(0, token.length.clamp(0, 8))}…');
+      final core = _core;
+      if (core == null || core.consent.allowsSurvey != true) return false;
+      unawaited(
+        core
+            .resolveSurveyLink(token)
+            .catchError((Object error, StackTrace stack) {
+          log.e('resolveSurveyLink failed', error, stack);
+        }),
+      );
       return true;
     } on Object catch (err, st) {
       log.e('handleSurveyDeepLink failed', err, st);
@@ -266,14 +463,13 @@ class UserGist {
   }
 
   // ---------------- Feature Requests (5th pillar) ----------------
-  // STATUS: API surface declared; HTTP + UI tracked in PARITY.md as the
-  // Flutter-stub for this pillar.
+  // HTTP transport, optimistic state, search, and SDK-owned UI are wired.
 
   static RequestsHandlers requestsHandlers = const RequestsHandlers();
 
   /// Open the SDK-provided requests board UI. Drop-in: as long as the
-  /// host app has mounted `UserGistProvider` in `MaterialApp.builder`, no
-  /// further wiring is required.
+  /// host app has mounted `UserGistProvider` below its Navigator (or supplied
+  /// its navigator key), no further wiring is required.
   static void openRequestsBoard() {
     RequestsNav.board();
   }
@@ -313,7 +509,9 @@ class UserGist {
     GetRequestsOptions options = const GetRequestsOptions(),
   }) async {
     final core = _core;
-    if (core == null) return const GetRequestsResult(items: [], nextCursor: null);
+    if (core == null) {
+      return const GetRequestsResult(items: [], nextCursor: null);
+    }
     return core.requestsApi.list(
       anonymousId: core.identity.anonymousId,
       externalId: core.identity.externalId,
@@ -364,7 +562,8 @@ class UserGist {
   }) async {
     final core = _core;
     if (core == null) throw StateError('UserGist.start() has not run');
-    final rollback = core.requestsCache.applyOptimisticFollow(requestId, follow);
+    final rollback =
+        core.requestsCache.applyOptimisticFollow(requestId, follow);
     final outcome = await core.requestsApi.follow(
       requestId: requestId,
       anonymousId: core.identity.anonymousId,

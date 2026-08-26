@@ -37,7 +37,8 @@ class ApiClient {
     http.Client? httpClient,
     RetryPolicy? retryPolicy,
     List<TlsPinSet>? pinSets,
-  })  : _http = httpClient ?? buildPinnedHttpClient(pinSets ?? defaultTlsPinSets()),
+  })  : _http =
+            httpClient ?? buildPinnedHttpClient(pinSets ?? defaultTlsPinSets()),
         _retry = retryPolicy ?? RetryPolicy();
 
   /// Base URL (no trailing slash).
@@ -51,17 +52,28 @@ class ApiClient {
 
   final http.Client _http;
   final RetryPolicy _retry;
+  String? _subjectToken;
+
+  /// Installs the server-minted subject credential used by every SDK route
+  /// except `/v1/sdk/session`.
+  void setSubjectToken(String? token) {
+    _subjectToken = token != null && token.startsWith('st_') ? token : null;
+  }
 
   /// Closes underlying resources.
   void dispose() {
     _http.close();
   }
 
-  Map<String, String> _headers() => <String, String>{
+  Map<String, String> _headers([String? subjectTokenOverride]) =>
+      <String, String>{
         'content-type': 'application/json; charset=utf-8',
         'accept': 'application/json',
         'authorization': 'Bearer $writeKey',
-        'x-usergist-sdk': 'flutter/$sdkVersion',
+        'x-usergist-sdk-version': 'flutter/$sdkVersion',
+        'x-usergist-platform': 'flutter',
+        if (subjectTokenOverride ?? _subjectToken case final token?)
+          'x-usergist-subject-token': token,
       };
 
   Uri _uri(String path, [Map<String, String>? query]) {
@@ -70,43 +82,55 @@ class ApiClient {
         : baseUrl;
     final url = Uri.parse('$base$path');
     if (query == null || query.isEmpty) return url;
-    return url.replace(queryParameters: <String, String>{
-      ...url.queryParameters,
-      ...query,
-    });
+    return url.replace(
+      queryParameters: <String, String>{
+        ...url.queryParameters,
+        ...query,
+      },
+    );
   }
 
   /// Performs a POST with a JSON body and retries on retryable failures.
   Future<ApiResult<Map<String, Object?>>> postJson(
     String path,
-    Object body,
-  ) =>
+    Object body, {
+    bool requiresSubject = true,
+    bool idempotent = true,
+    String? subjectTokenOverride,
+  }) =>
       _sendWithRetry(
         method: 'POST',
         path: path,
         body: body,
+        requiresSubject: requiresSubject,
+        idempotent: idempotent,
+        subjectTokenOverride: subjectTokenOverride,
       );
 
   /// Performs a GET with query parameters and retries on retryable failures.
   Future<ApiResult<Map<String, Object?>>> getJson(
     String path, {
     Map<String, String>? query,
+    bool requiresSubject = true,
   }) =>
       _sendWithRetry(
         method: 'GET',
         path: path,
         query: query,
+        requiresSubject: requiresSubject,
       );
 
   /// Performs a PATCH with a JSON body and retries on retryable failures.
   Future<ApiResult<Map<String, Object?>>> patchJson(
     String path,
-    Object body,
-  ) =>
+    Object body, {
+    bool requiresSubject = true,
+  }) =>
       _sendWithRetry(
         method: 'PATCH',
         path: path,
         body: body,
+        requiresSubject: requiresSubject,
       );
 
   /// Performs a DELETE with optional query params and retries on retryable
@@ -115,11 +139,13 @@ class ApiClient {
   Future<ApiResult<Map<String, Object?>>> deleteJson(
     String path, {
     Map<String, String>? query,
+    bool requiresSubject = true,
   }) =>
       _sendWithRetry(
         method: 'DELETE',
         path: path,
         query: query,
+        requiresSubject: requiresSubject,
       );
 
   Future<ApiResult<Map<String, Object?>>> _sendWithRetry({
@@ -127,19 +153,29 @@ class ApiClient {
     required String path,
     Object? body,
     Map<String, String>? query,
+    bool requiresSubject = true,
+    bool idempotent = true,
+    String? subjectTokenOverride,
   }) async {
+    final requestSubjectToken = subjectTokenOverride ?? _subjectToken;
+    if (requiresSubject && requestSubjectToken == null) {
+      return const ApiResult<Map<String, Object?>>(
+        success: false,
+        error: 'subject-session-unavailable',
+      );
+    }
     Object? lastError;
     int? lastStatus;
     for (var attempt = 1; attempt <= _retry.maxAttempts; attempt++) {
       try {
         final uri = _uri(path, query);
         final req = http.Request(method, uri);
-        req.headers.addAll(_headers());
+        req.headers.addAll(_headers(subjectTokenOverride));
         if (body != null) {
           req.body = safeEncode(body);
         }
         final streamed = await _http.send(req).timeout(
-              const Duration(seconds: 30),
+              const Duration(seconds: 15),
             );
         final res = await http.Response.fromStream(streamed);
         lastStatus = res.statusCode;
@@ -153,9 +189,27 @@ class ApiClient {
           }
           final decoded = safeDecode(utf8.decode(res.bodyBytes));
           if (decoded is Map<String, Object?>) {
+            final payload =
+                decoded['success'] == true && decoded.containsKey('data')
+                    ? decoded['data']
+                    : decoded;
+            if (payload is Map<String, Object?>) {
+              return ApiResult<Map<String, Object?>>(
+                success: true,
+                data: payload,
+                status: res.statusCode,
+              );
+            }
+            if (payload is Map<Object?, Object?>) {
+              return ApiResult<Map<String, Object?>>(
+                success: true,
+                data: payload.map((k, v) => MapEntry(k.toString(), v)),
+                status: res.statusCode,
+              );
+            }
             return ApiResult<Map<String, Object?>>(
               success: true,
-              data: decoded,
+              data: const <String, Object?>{},
               status: res.statusCode,
             );
           }
@@ -175,6 +229,7 @@ class ApiClient {
           );
         }
         if (!_retry.isRetryable(res.statusCode) ||
+            !idempotent ||
             attempt == _retry.maxAttempts) {
           return ApiResult<Map<String, Object?>>(
             success: false,
@@ -190,7 +245,7 @@ class ApiClient {
       } on Object catch (err, st) {
         lastError = err;
         log.e('network attempt $attempt failed', err, st);
-        if (attempt == _retry.maxAttempts) break;
+        if (!idempotent || attempt == _retry.maxAttempts) break;
         final delay = _retry.delayFor(attempt);
         await Future<void>.delayed(delay);
       }

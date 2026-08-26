@@ -25,6 +25,5 @@ linter:
     - sort_pub_dependencies
     - always_declare_return_types
     - avoid_redundant_argument_values
-    - avoid_returning_null_for_future
     - cancel_subscriptions
     - close_sinks

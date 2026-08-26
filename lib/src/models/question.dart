@@ -36,6 +36,24 @@ enum QuestionType {
   }
 }
 
+/// Visual treatment for a rating question.
+enum RatingDisplayMode {
+  /// Filled and unfilled star glyphs.
+  stars,
+
+  /// Numbered score chips.
+  numeric,
+
+  /// Five sentiment faces. Non-five-point scales fall back to stars.
+  emoji;
+
+  static RatingDisplayMode fromWire(Object? value) => switch (value) {
+        'numeric' => RatingDisplayMode.numeric,
+        'emoji' => RatingDisplayMode.emoji,
+        _ => RatingDisplayMode.stars,
+      };
+}
+
 /// Base interface for all question variants.
 sealed class Question {
   /// Creates a base [Question]. Concrete variants extend this class.
@@ -43,6 +61,7 @@ sealed class Question {
     required this.id,
     required this.title,
     this.subtitle,
+    this.imageUrl,
   });
 
   /// Stable id assigned by the server.
@@ -53,6 +72,9 @@ sealed class Question {
 
   /// Optional secondary / subtitle text.
   final String? subtitle;
+
+  /// Optional 16:9 image rendered above the question title.
+  final String? imageUrl;
 
   /// Concrete type discriminator.
   QuestionType get type;
@@ -77,12 +99,17 @@ class RatingQuestion extends Question {
     required super.title,
     required this.scale,
     super.subtitle,
+    super.imageUrl,
+    this.display = RatingDisplayMode.stars,
     this.lowLabel,
     this.highLabel,
   });
 
   /// The scale — either 5 or 10.
   final int scale;
+
+  /// Dashboard-selected visual treatment. Defaults to stars on the wire.
+  final RatingDisplayMode display;
 
   /// Optional anchor label for the low end.
   final String? lowLabel;
@@ -99,7 +126,9 @@ class RatingQuestion extends Question {
       id: json['id']! as String,
       title: json['title']! as String,
       subtitle: json['subtitle'] as String?,
+      imageUrl: json['imageUrl'] as String?,
       scale: scale == 10 ? 10 : 5,
+      display: RatingDisplayMode.fromWire(json['display']),
       lowLabel: json['lowLabel'] as String?,
       highLabel: json['highLabel'] as String?,
     );
@@ -113,11 +142,20 @@ class NpsQuestion extends Question {
     required super.id,
     required super.title,
     super.subtitle,
+    super.imageUrl,
     this.followUp,
+    this.lowLabel,
+    this.highLabel,
   });
 
   /// Optional free-text follow-up prompt.
   final String? followUp;
+
+  /// Optional label shown beside score 0.
+  final String? lowLabel;
+
+  /// Optional label shown beside score 10.
+  final String? highLabel;
 
   @override
   QuestionType get type => QuestionType.nps;
@@ -127,7 +165,10 @@ class NpsQuestion extends Question {
       id: json['id']! as String,
       title: json['title']! as String,
       subtitle: json['subtitle'] as String?,
+      imageUrl: json['imageUrl'] as String?,
       followUp: json['followUp'] as String?,
+      lowLabel: json['lowLabel'] as String?,
+      highLabel: json['highLabel'] as String?,
     );
   }
 }
@@ -159,6 +200,7 @@ class MultipleChoiceQuestion extends Question {
     required super.title,
     required this.options,
     super.subtitle,
+    super.imageUrl,
     this.multiSelect = false,
   });
 
@@ -185,6 +227,7 @@ class MultipleChoiceQuestion extends Question {
       id: json['id']! as String,
       title: json['title']! as String,
       subtitle: json['subtitle'] as String?,
+      imageUrl: json['imageUrl'] as String?,
       options: List<MultipleChoiceOption>.unmodifiable(opts),
       multiSelect: json['multiSelect'] as bool? ?? false,
     );
@@ -198,6 +241,7 @@ class ShortTextQuestion extends Question {
     required super.id,
     required super.title,
     super.subtitle,
+    super.imageUrl,
     this.placeholder,
     this.maxLength,
   });
@@ -216,6 +260,7 @@ class ShortTextQuestion extends Question {
       id: json['id']! as String,
       title: json['title']! as String,
       subtitle: json['subtitle'] as String?,
+      imageUrl: json['imageUrl'] as String?,
       placeholder: json['placeholder'] as String?,
       maxLength: (json['maxLength'] as num?)?.toInt(),
     );
