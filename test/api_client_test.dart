@@ -8,13 +8,15 @@ import 'package:usergist_feedback/src/internal/transport/api_client.dart';
 import 'package:usergist_feedback/src/internal/transport/retry_policy.dart';
 
 void main() {
-  test('postJson sends auth + payload and decodes a 200 response',
-      () async {
+  test('postJson sends auth + payload and decodes a 200 response', () async {
     final seen = <http.BaseRequest>[];
     final mock = MockClient((req) async {
       seen.add(req);
       return http.Response(
-        jsonEncode(<String, Object?>{'accepted': 3}),
+        jsonEncode(<String, Object?>{
+          'success': true,
+          'data': <String, Object?>{'accepted': 3},
+        }),
         200,
         headers: <String, String>{'content-type': 'application/json'},
       );
@@ -25,6 +27,7 @@ void main() {
       sdkVersion: '0.1.0',
       httpClient: mock,
     );
+    client.setSubjectToken('st_test');
     final res = await client.postJson('/v1/sdk/ingest', <String, Object?>{
       'events': <Object?>[],
       'context': <String, Object?>{'anonymousId': 'anon'},
@@ -38,7 +41,33 @@ void main() {
     expect(sent.method, 'POST');
     expect(sent.url.toString(), 'https://api.test/v1/sdk/ingest');
     expect(sent.headers['authorization'], 'Bearer wk_abc');
-    expect(sent.headers['x-usergist-sdk'], 'flutter/0.1.0');
+    expect(sent.headers['x-usergist-sdk-version'], 'flutter/0.1.0');
+    expect(sent.headers['x-usergist-platform'], 'flutter');
+    expect(sent.headers['x-usergist-subject-token'], 'st_test');
+  });
+
+  test('request credential override does not replace the shared credential',
+      () async {
+    final seenTokens = <String?>[];
+    final mock = MockClient((req) async {
+      seenTokens.add(req.headers['x-usergist-subject-token']);
+      return http.Response('{}', 200);
+    });
+    final client = ApiClient(
+      baseUrl: 'https://api.test',
+      writeKey: 'wk_abc',
+      sdkVersion: '0.1.0',
+      httpClient: mock,
+    )..setSubjectToken('st_anonymous');
+
+    await client.postJson(
+      '/v1/sdk/identify',
+      const <String, Object?>{},
+      subjectTokenOverride: 'st_identified',
+    );
+    await client.postJson('/v1/sdk/consent', const <String, Object?>{});
+
+    expect(seenTokens, <String?>['st_identified', 'st_anonymous']);
   });
 
   test('retries on 500 and eventually succeeds', () async {
@@ -60,6 +89,7 @@ void main() {
         random: Random(1),
       ),
     );
+    client.setSubjectToken('st_test');
     final res = await client.postJson('/v1/sdk/ingest', <String, Object?>{});
     expect(res.success, isTrue);
     expect(calls, 3);
@@ -84,6 +114,7 @@ void main() {
         random: Random(1),
       ),
     );
+    client.setSubjectToken('st_test');
     final res = await client.postJson('/v1/sdk/ingest', <String, Object?>{});
     expect(res.success, isFalse);
     expect(res.status, 500);
@@ -102,15 +133,44 @@ void main() {
       sdkVersion: '0.1.0',
       httpClient: mock,
       retryPolicy: RetryPolicy(
-        maxAttempts: 5,
         baseDelayMs: 1,
         maxDelayMs: 1,
         jitter: 0,
       ),
     );
+    client.setSubjectToken('st_test');
     final res = await client.postJson('/v1/sdk/ingest', <String, Object?>{});
     expect(res.success, isFalse);
     expect(res.status, 403);
+    expect(calls, 1);
+  });
+
+  test('non-idempotent post does not retry a lost session response', () async {
+    var calls = 0;
+    final mock = MockClient((_) async {
+      calls++;
+      return http.Response('server unavailable', 503);
+    });
+    final client = ApiClient(
+      baseUrl: 'https://api.test',
+      writeKey: 'wk_abc',
+      sdkVersion: '0.1.0',
+      httpClient: mock,
+      retryPolicy: RetryPolicy(
+        baseDelayMs: 1,
+        maxDelayMs: 1,
+        jitter: 0,
+      ),
+    );
+
+    final res = await client.postJson(
+      '/v1/sdk/session',
+      <String, Object?>{'anonymousId': 'anon-1'},
+      requiresSubject: false,
+      idempotent: false,
+    );
+
+    expect(res.success, isFalse);
     expect(calls, 1);
   });
 
@@ -126,6 +186,7 @@ void main() {
       sdkVersion: '0.1.0',
       httpClient: mock,
     );
+    client.setSubjectToken('st_test');
     final res = await client.getJson(
       '/v1/sdk/armed-triggers',
       query: <String, String>{'anonymousId': 'anon-1', 'externalId': 'u-1'},

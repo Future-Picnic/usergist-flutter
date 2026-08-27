@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
+import '../text_answer_decoration.dart';
 import '../theme_resolver.dart';
 
 /// Widget rendering a [ShortTextQuestion].
@@ -42,25 +43,16 @@ class _ShortTextQuestionViewState extends State<ShortTextQuestionView> {
       controller: _ctrl,
       onChanged: widget.onChanged,
       maxLength: widget.question.maxLength,
-      maxLines: 4,
-      minLines: 2,
+      maxLines: 6,
+      minLines: 4,
+      cursorColor: theme.primary,
       style: TextStyle(
         color: theme.text,
         fontFamily: theme.fontFamily,
       ),
-      decoration: InputDecoration(
+      decoration: textAnswerDecoration(
+        theme: theme,
         hintText: widget.question.placeholder,
-        hintStyle: TextStyle(color: theme.subtext),
-        filled: true,
-        fillColor: theme.background,
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.primary),
-        ),
       ),
     );
   }

@@ -9,7 +9,7 @@ import 'logger.dart';
 // PORTED FROM: packages/sdk-react-native/src/internal/queue.ts
 //
 // Persisted shape on disk:
-//   <header line>: {"version":1}\n
+//   <header line>: {"version":2}\n
 //   <event line 1>: {...}\n
 //   <event line 2>: {...}\n
 //
@@ -21,7 +21,7 @@ import 'logger.dart';
 // with no header. On hydrate, if the first line is missing a "version"
 // key, we treat the entire file as legacy events; the next _persist()
 // rewrite emits the header.
-const int _queueSchemaVersion = 1;
+const int _queueSchemaVersion = 2;
 const String _queueHeaderLine = '{"version":$_queueSchemaVersion}';
 
 /// Bounded, persistent FIFO queue of pending ingest events.
@@ -119,6 +119,20 @@ class EventQueue {
     for (var i = 0; i < n; i++) {
       _buffer.removeFirst();
     }
+    await _persist();
+  }
+
+  /// Removes selected events without disturbing other identities/purposes.
+  Future<void> remove(Iterable<String> eventIds) async {
+    final ids = eventIds.toSet();
+    if (ids.isEmpty) return;
+    _buffer.removeWhere((event) => ids.contains(event.eventId));
+    await _persist();
+  }
+
+  /// Removes all queued events governed by [purpose].
+  Future<void> removePurpose(EventPurpose purpose) async {
+    _buffer.removeWhere((event) => event.purpose == purpose);
     await _persist();
   }
 

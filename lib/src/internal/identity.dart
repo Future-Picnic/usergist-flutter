@@ -3,7 +3,7 @@ import 'dart:async';
 import 'storage.dart';
 import 'uid.dart';
 
-/// Persistent identity store — an anonymous UUID that survives restarts
+/// Persistent identity store — a 21-character anonymous id that survives restarts
 /// plus an optional external id set by [identify].
 class IdentityStore {
   /// Creates an identity store backed by [store].
@@ -23,7 +23,7 @@ class IdentityStore {
   Future<void> hydrate() async {
     var anon = await _store.readString(_anonKey);
     if (anon == null || anon.isEmpty) {
-      anon = newUuid();
+      anon = newAnonymousId();
       await _store.writeString(_anonKey, anon);
     }
     _anonymousId = anon;
@@ -59,7 +59,7 @@ class IdentityStore {
     _externalId = null;
     await _store.remove(_extKey);
     await _store.remove(_propsKey);
-    final fresh = newUuid();
+    final fresh = newAnonymousId();
     _anonymousId = fresh;
     await _store.writeString(_anonKey, fresh);
   }

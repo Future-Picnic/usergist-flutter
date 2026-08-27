@@ -38,8 +38,9 @@ class PromptThemeColors {
   }
 }
 
-/// Visual overrides for prompt presentation. Any `null` field falls back
-/// to the host app's [Theme]-derived defaults.
+/// Global visual defaults for prompt presentation. Per-prompt dashboard
+/// styling is applied on top; any `null` field falls back to the host app's
+/// [Theme]-derived defaults.
 class PromptTheme {
   /// Creates a [PromptTheme] value. All fields are optional.
   const PromptTheme({this.colors, this.radius, this.fontFamily});

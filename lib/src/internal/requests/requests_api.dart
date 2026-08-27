@@ -7,16 +7,17 @@ import '../../models/request.dart';
 import '../logger.dart';
 import '../transport/api_client.dart';
 import '../transport/endpoints.dart';
+import '../uid.dart';
 
 class FlutterRequestComment {
   const FlutterRequestComment({
     required this.id,
     required this.requestId,
     required this.body,
+    required this.authorAnonymousId,
+    required this.viewerIsAuthor,
     required this.createdAt,
-    required this.isFromTeam,
-    this.authorAnonymousId,
-    this.authorRole,
+    this.authorExternalId,
     this.updatedAt,
   });
   final String id;
@@ -24,9 +25,9 @@ class FlutterRequestComment {
   final String body;
   final String createdAt;
   final String? updatedAt;
-  final String? authorAnonymousId;
-  final String? authorRole;
-  final bool isFromTeam;
+  final String authorAnonymousId;
+  final String? authorExternalId;
+  final bool viewerIsAuthor;
 }
 
 class FlutterRequestBranding {
@@ -87,7 +88,8 @@ class RequestsApi {
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
     };
-    final res = await _api.getJson(SdkEndpoints.request(requestId), query: query);
+    final res =
+        await _api.getJson(SdkEndpoints.request(requestId), query: query);
     if (!res.success || res.data == null) return null;
     return _decodeRequest(res.data!);
   }
@@ -99,6 +101,7 @@ class RequestsApi {
     required String description,
   }) async {
     final body = <String, Object?>{
+      'idempotencyKey': newUuid(),
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       'title': title,
@@ -143,7 +146,8 @@ class RequestsApi {
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       'follow': follow,
     };
-    final res = await _api.postJson(SdkEndpoints.requestFollow(requestId), body);
+    final res =
+        await _api.postJson(SdkEndpoints.requestFollow(requestId), body);
     if (!res.success || res.data == null) return null;
     final d = res.data!;
     final sourceRaw = (d['source'] as String?) ?? 'manual';
@@ -168,8 +172,10 @@ class RequestsApi {
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
     };
-    final res = await _api.getJson(SdkEndpoints.requestComments(requestId),
-        query: query);
+    final res = await _api.getJson(
+      SdkEndpoints.requestComments(requestId),
+      query: query,
+    );
     if (!res.success || res.data == null) return const [];
     final items = (res.data!['items'] as List?) ?? const <Object?>[];
     return items
@@ -185,6 +191,7 @@ class RequestsApi {
     required String body,
   }) async {
     final payload = <String, Object?>{
+      'idempotencyKey': newUuid(),
       'anonymousId': anonymousId,
       if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       'body': body,
@@ -284,11 +291,11 @@ class RequestsApi {
       id: m['id'] as String? ?? '',
       requestId: m['requestId'] as String? ?? '',
       body: m['body'] as String? ?? '',
+      authorAnonymousId: m['authorAnonymousId'] as String? ?? '',
+      authorExternalId: m['authorExternalId'] as String?,
+      viewerIsAuthor: (m['viewerIsAuthor'] as bool?) ?? false,
       createdAt: m['createdAt'] as String? ?? '',
       updatedAt: m['updatedAt'] as String?,
-      authorAnonymousId: m['authorAnonymousId'] as String?,
-      authorRole: m['authorRole'] as String?,
-      isFromTeam: (m['isFromTeam'] as bool?) ?? false,
     );
   }
 }

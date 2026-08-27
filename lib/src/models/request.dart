@@ -1,7 +1,8 @@
 /// Feature requests (5th pillar) — public Dart types.
 ///
-/// STATUS: API surface declared; HTTP wiring + UI widgets tracked in
-/// PARITY.md as the Flutter-stub for this pillar.
+/// Transport, optimistic cache behavior, and SDK-owned UI are implemented;
+/// PARITY.md tracks remaining release testing.
+library;
 
 enum RequestStatus {
   underReview('under_review'),

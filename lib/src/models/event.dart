@@ -1,9 +1,16 @@
 import 'any_value.dart';
+import '../internal/uid.dart';
+
+/// Local consent purpose used to decide whether a queued event may leave
+/// the device. This field is persisted but intentionally omitted on the wire.
+enum EventPurpose { analytics, feedback }
 
 /// A single tracked event, ready for persistence and ingest.
 class IngestEvent {
   /// Creates an event.
-  const IngestEvent({
+  IngestEvent({
+    String? eventId,
+    this.purpose = EventPurpose.analytics,
     required this.name,
     required this.timestamp,
     required this.anonymousId,
@@ -13,7 +20,13 @@ class IngestEvent {
     this.sdkVersion,
     this.appVersion,
     this.platform = 'flutter',
-  });
+  }) : eventId = eventId ?? newUuid();
+
+  /// Stable idempotency/correlation identifier for this event.
+  final String eventId;
+
+  /// Consent purpose governing transmission of this event.
+  final EventPurpose purpose;
 
   /// Event name.
   final String name;
@@ -44,12 +57,27 @@ class IngestEvent {
 
   /// JSON representation.
   Map<String, Object?> toJson() => <String, Object?>{
+        'eventId': eventId,
+        'purpose': purpose.name,
         'name': name,
         'timestamp': timestamp,
         'anonymousId': anonymousId,
         if (externalId != null) 'externalId': externalId,
-        if (properties.isNotEmpty)
-          'properties': sanitizeProperties(properties),
+        if (properties.isNotEmpty) 'properties': sanitizeProperties(properties),
+        if (sessionId != null) 'sessionId': sessionId,
+        if (sdkVersion != null) 'sdkVersion': sdkVersion,
+        if (appVersion != null) 'appVersion': appVersion,
+        'platform': platform,
+      };
+
+  /// API representation. Local-only [purpose] is deliberately excluded.
+  Map<String, Object?> toWireJson() => <String, Object?>{
+        'eventId': eventId,
+        'name': name,
+        'timestamp': timestamp,
+        'anonymousId': anonymousId,
+        if (externalId != null) 'externalId': externalId,
+        if (properties.isNotEmpty) 'properties': sanitizeProperties(properties),
         if (sessionId != null) 'sessionId': sessionId,
         if (sdkVersion != null) 'sdkVersion': sdkVersion,
         if (appVersion != null) 'appVersion': appVersion,
@@ -58,6 +86,11 @@ class IngestEvent {
 
   /// Parses from JSON.
   factory IngestEvent.fromJson(Map<String, Object?> json) => IngestEvent(
+        eventId: json['eventId'] as String? ?? newUuid(),
+        purpose: EventPurpose.values.firstWhere(
+          (value) => value.name == json['purpose'],
+          orElse: () => EventPurpose.analytics,
+        ),
         name: json['name']! as String,
         timestamp: json['timestamp']! as String,
         anonymousId: json['anonymousId']! as String,

@@ -1,11 +1,15 @@
 /// Drop-in Flutter UI for the Feature Requests pillar.
 ///
-/// Host apps mount `UserGistProvider` (which is mounted in `MaterialApp.builder`).
+/// Host apps mount `UserGistProvider` below a Navigator, or provide its root
+/// navigator key.
 /// `UserGist.openRequestsBoard()` then pushes a route onto the host's
 /// Navigator — no host-side UI work required.
+library;
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../internal/logger.dart';
 import '../internal/requests/requests_api.dart';
 import '../models/request.dart';
 import '../usergist.dart';
@@ -19,11 +23,10 @@ class RequestsNav {
   static final StreamController<_NavEvent> _ctrl =
       StreamController<_NavEvent>.broadcast();
 
-  static Stream<_NavEvent> get stream => _ctrl.stream;
+  static Stream<Object> get stream => _ctrl.stream;
 
   static void board() => _ctrl.add(const _BoardEvent());
-  static void detail(String requestId) =>
-      _ctrl.add(_DetailEvent(requestId));
+  static void detail(String requestId) => _ctrl.add(_DetailEvent(requestId));
 }
 
 sealed class _NavEvent {
@@ -41,7 +44,9 @@ class _DetailEvent extends _NavEvent {
 
 /// Mount inside `UserGistProvider` to wire up the requests UI.
 class RequestsNavHost extends StatefulWidget {
-  const RequestsNavHost({super.key});
+  const RequestsNavHost({this.navigatorKey, super.key});
+
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   State<RequestsNavHost> createState() => _RequestsNavHostState();
@@ -54,7 +59,7 @@ class _RequestsNavHostState extends State<RequestsNavHost> {
   @override
   void initState() {
     super.initState();
-    _sub = RequestsNav.stream.listen(_onNav);
+    _sub = RequestsNav.stream.cast<_NavEvent>().listen(_onNav);
     unawaited(_loadBranding());
   }
 
@@ -65,20 +70,32 @@ class _RequestsNavHostState extends State<RequestsNavHost> {
   }
 
   void _onNav(_NavEvent ev) {
-    final nav = Navigator.of(context, rootNavigator: true);
+    final nav = widget.navigatorKey?.currentState ??
+        Navigator.maybeOf(context, rootNavigator: true);
+    if (nav == null) {
+      log.e(
+        'Requests UI requires UserGistProvider below a Navigator or with a '
+        'navigatorKey',
+      );
+      return;
+    }
     final branding = _branding ?? _Branding.fallback;
     switch (ev) {
       case _BoardEvent():
-        nav.push(MaterialPageRoute(
-          builder: (_) => _BoardScreen(branding: branding),
-        ));
-      case _DetailEvent(:final requestId):
-        nav.push(MaterialPageRoute(
-          builder: (_) => _DetailScreen(
-            requestId: requestId,
-            branding: branding,
+        nav.push(
+          MaterialPageRoute<void>(
+            builder: (_) => _BoardScreen(branding: branding),
           ),
-        ));
+        );
+      case _DetailEvent(:final requestId):
+        nav.push(
+          MaterialPageRoute<void>(
+            builder: (_) => _DetailScreen(
+              requestId: requestId,
+              branding: branding,
+            ),
+          ),
+        );
     }
   }
 
@@ -143,9 +160,9 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -185,6 +202,7 @@ class _BoardScreen extends StatefulWidget {
 class _BoardScreenState extends State<_BoardScreen> {
   bool _loading = true;
   List<RequestSummary> _items = const [];
+  final Set<String> _voteInFlight = <String>{};
 
   @override
   void initState() {
@@ -205,16 +223,26 @@ class _BoardScreenState extends State<_BoardScreen> {
   }
 
   Future<void> _toggleVote(RequestSummary item) async {
+    if (_voteInFlight.contains(item.id)) return;
     final next = !item.viewerHasUpvoted;
     setState(() {
+      _voteInFlight.add(item.id);
       _items = _items
           .map((r) => r.id == item.id ? _voteSummary(r, next) : r)
           .toList(growable: false);
     });
     try {
-      await UserGist.voteOnRequest(item.id, vote: next);
+      final result = await UserGist.voteOnRequest(item.id, vote: next);
+      if (!mounted) return;
+      setState(() {
+        _items = _items
+            .map((r) => r.id == item.id ? _voteSummaryResult(r, result) : r)
+            .toList(growable: false);
+      });
     } catch (_) {
       unawaited(_load());
+    } finally {
+      if (mounted) setState(() => _voteInFlight.remove(item.id));
     }
   }
 
@@ -228,26 +256,34 @@ class _BoardScreenState extends State<_BoardScreen> {
         elevation: 0,
         title: Text(widget.branding.entryLabel),
         actions: [
-          TextButton(
-            onPressed: () async {
-              final created = await Navigator.of(context).push<FeatureRequest?>(
-                MaterialPageRoute(
-                  builder: (_) => _SubmitScreen(branding: widget.branding),
-                ),
-              );
-              if (created != null && mounted) {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => _DetailScreen(
-                    requestId: created.id,
-                    branding: widget.branding,
+          Semantics(
+            button: true,
+            label: 'Create new request',
+            excludeSemantics: true,
+            child: TextButton(
+              onPressed: () async {
+                final navigator = Navigator.of(context);
+                final created = await navigator.push<FeatureRequest?>(
+                  MaterialPageRoute<FeatureRequest?>(
+                    builder: (_) => _SubmitScreen(branding: widget.branding),
                   ),
-                ));
-                unawaited(_load());
-              }
-            },
-            child: Text(
-              '+ New',
-              style: TextStyle(color: accent, fontWeight: FontWeight.w600),
+                );
+                if (created != null && mounted) {
+                  navigator.push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _DetailScreen(
+                        requestId: created.id,
+                        branding: widget.branding,
+                      ),
+                    ),
+                  );
+                  unawaited(_load());
+                }
+              },
+              child: Text(
+                '+ New',
+                style: TextStyle(color: accent, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -266,9 +302,10 @@ class _BoardScreenState extends State<_BoardScreen> {
                       itemBuilder: (_, i) => _RequestCard(
                         item: _items[i],
                         accent: accent,
+                        voteEnabled: !_voteInFlight.contains(_items[i].id),
                         onUpvote: () => _toggleVote(_items[i]),
-                        onOpen: () => Navigator.of(context).push(
-                          MaterialPageRoute(
+                        onOpen: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
                             builder: (_) => _DetailScreen(
                               requestId: _items[i].id,
                               branding: widget.branding,
@@ -284,11 +321,14 @@ class _BoardScreenState extends State<_BoardScreen> {
   Widget _emptyState(Color accent) {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
-      children: [
-        const Text('💡',
-            style: TextStyle(fontSize: 48), textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-        const Text(
+      children: const [
+        Text(
+          '💡',
+          style: TextStyle(fontSize: 48),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 16),
+        Text(
           'No suggestions yet',
           style: TextStyle(
             fontSize: 18,
@@ -297,8 +337,8 @@ class _BoardScreenState extends State<_BoardScreen> {
           ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
-        const Text(
+        SizedBox(height: 8),
+        Text(
           'Be the first to share an idea — what would make this app better?',
           style: TextStyle(fontSize: 14, color: Color(0xFF6B7280), height: 1.4),
           textAlign: TextAlign.center,
@@ -312,17 +352,19 @@ class _RequestCard extends StatelessWidget {
   const _RequestCard({
     required this.item,
     required this.accent,
+    required this.voteEnabled,
     required this.onUpvote,
     required this.onOpen,
   });
   final RequestSummary item;
   final Color accent;
+  final bool voteEnabled;
   final VoidCallback onUpvote;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final accentSoft = accent.withOpacity(0.10);
+    final accentSoft = accent.withValues(alpha: 0.10);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -339,7 +381,12 @@ class _RequestCard extends StatelessWidget {
                 active: item.viewerHasUpvoted,
                 accent: accent,
                 accentSoft: accentSoft,
-                onPress: onUpvote,
+                semanticsLabel: voteEnabled
+                    ? item.viewerHasUpvoted
+                        ? 'Remove vote from ${item.title}'
+                        : 'Upvote ${item.title}'
+                    : 'Updating vote for ${item.title}',
+                onPress: voteEnabled ? onUpvote : null,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -374,7 +421,9 @@ class _RequestCard extends StatelessWidget {
                         if (item.viewerIsFollowing)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFF111111),
                               borderRadius: BorderRadius.circular(6),
@@ -407,44 +456,56 @@ class _UpvoteButton extends StatelessWidget {
     required this.active,
     required this.accent,
     required this.accentSoft,
+    required this.semanticsLabel,
     required this.onPress,
   });
   final int count;
   final bool active;
   final Color accent;
   final Color accentSoft;
-  final VoidCallback onPress;
+  final String semanticsLabel;
+  final VoidCallback? onPress;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPress,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 52,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? accent : accentSoft,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: active ? accent : Colors.transparent),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('▲',
+    return Semantics(
+      button: true,
+      enabled: onPress != null,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onPress,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 52,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? accent : accentSoft,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: active ? accent : Colors.transparent),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '▲',
                 style: TextStyle(
                   color: active ? Colors.white : accent,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                )),
-            const SizedBox(height: 1),
-            Text('$count',
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '$count',
                 style: TextStyle(
                   color: active ? Colors.white : accent,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                )),
-          ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -470,6 +531,7 @@ class _DetailScreenState extends State<_DetailScreen> {
   List<FlutterRequestComment> _comments = const [];
   final _commentCtrl = TextEditingController();
   bool _posting = false;
+  bool _requestMutationInFlight = false;
 
   @override
   void initState() {
@@ -492,43 +554,62 @@ class _DetailScreenState extends State<_DetailScreen> {
 
   Future<void> _toggleVote() async {
     final data = _data;
-    if (data == null) return;
+    if (data == null || _requestMutationInFlight) return;
     final next = !data.viewerHasUpvoted;
     setState(() {
+      _requestMutationInFlight = true;
       _data = _vote(data, next);
     });
     try {
-      await UserGist.voteOnRequest(data.id, vote: next);
+      final result = await UserGist.voteOnRequest(data.id, vote: next);
+      if (mounted) setState(() => _data = _voteResult(_data!, result));
     } catch (_) {
-      unawaited(_load());
+      if (mounted) setState(() => _data = data);
+    } finally {
+      if (mounted) setState(() => _requestMutationInFlight = false);
     }
   }
 
   Future<void> _toggleFollow() async {
     final data = _data;
-    if (data == null) return;
+    if (data == null || _requestMutationInFlight) return;
     final next = !data.viewerIsFollowing;
     setState(() {
+      _requestMutationInFlight = true;
       _data = _follow(data, next);
     });
     try {
-      await UserGist.followRequest(data.id, follow: next);
+      final result = await UserGist.followRequest(data.id, follow: next);
+      if (mounted) setState(() => _data = _followResult(_data!, result));
     } catch (_) {
-      unawaited(_load());
+      if (mounted) setState(() => _data = data);
+    } finally {
+      if (mounted) setState(() => _requestMutationInFlight = false);
     }
   }
 
   Future<void> _postComment() async {
     final body = _commentCtrl.text.trim();
-    if (body.isEmpty || body.length > 1000) return;
-    setState(() => _posting = true);
+    if (_posting || body.isEmpty || body.length > 1000) return;
+    setState(() {
+      _posting = true;
+      _commentCtrl.clear();
+    });
     try {
       final c = await UserGist.postComment(widget.requestId, body);
       if (c != null && mounted) {
         setState(() {
           _comments = [..._comments, c];
-          _commentCtrl.clear();
         });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          if (_commentCtrl.text.isEmpty) _commentCtrl.text = body;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not post: $error')),
+        );
       }
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -592,14 +673,19 @@ class _DetailScreenState extends State<_DetailScreen> {
                   _devResponseCard(data.devResponse!, accent),
                 ],
                 const SizedBox(height: 28),
-                _commentsSection(accent),
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  child: _commentsSection(accent),
+                ),
               ],
             ),
       bottomNavigationBar: data == null
           ? null
           : SafeArea(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
@@ -610,12 +696,18 @@ class _DetailScreenState extends State<_DetailScreen> {
                       child: _actionBtn(
                         active: data.viewerHasUpvoted,
                         activeBg: accent,
-                        inactiveBg: accent.withOpacity(0.15),
+                        inactiveBg: accent.withValues(alpha: 0.15),
                         label: data.viewerHasUpvoted
                             ? '▲ Upvoted (${data.upvoteCount})'
                             : '▲ Upvote (${data.upvoteCount})',
-                        textColor: data.viewerHasUpvoted ? Colors.white : accent,
-                        onPress: _toggleVote,
+                        textColor:
+                            data.viewerHasUpvoted ? Colors.white : accent,
+                        semanticsLabel: _requestMutationInFlight
+                            ? 'Updating request vote'
+                            : data.viewerHasUpvoted
+                                ? 'Remove request vote'
+                                : 'Upvote request',
+                        onPress: _requestMutationInFlight ? null : _toggleVote,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -624,13 +716,18 @@ class _DetailScreenState extends State<_DetailScreen> {
                         active: data.viewerIsFollowing,
                         activeBg: const Color(0xFF111111),
                         inactiveBg: const Color(0xFFF3F4F6),
-                        label: data.viewerIsFollowing
-                            ? '✓ Following'
-                            : 'Follow',
+                        label:
+                            data.viewerIsFollowing ? '✓ Following' : 'Follow',
                         textColor: data.viewerIsFollowing
                             ? Colors.white
                             : const Color(0xFF111111),
-                        onPress: _toggleFollow,
+                        semanticsLabel: _requestMutationInFlight
+                            ? 'Updating request follow'
+                            : data.viewerIsFollowing
+                                ? 'Unfollow request'
+                                : 'Follow request',
+                        onPress:
+                            _requestMutationInFlight ? null : _toggleFollow,
                       ),
                     ),
                   ],
@@ -649,9 +746,21 @@ class _DetailScreenState extends State<_DetailScreen> {
       ),
       child: Row(
         children: [
-          Expanded(child: _stat('${data.upvoteCount}', 'upvotes', accent)),
+          Expanded(
+            child: Semantics(
+              label: '${data.upvoteCount} upvotes',
+              excludeSemantics: true,
+              child: _stat('${data.upvoteCount}', 'upvotes', accent),
+            ),
+          ),
           Container(width: 1, height: 30, color: const Color(0xFFE5E7EB)),
-          Expanded(child: _stat('${data.followerCount}', 'followers', null)),
+          Expanded(
+            child: Semantics(
+              label: '${data.followerCount} followers',
+              excludeSemantics: true,
+              child: _stat('${data.followerCount}', 'followers', null),
+            ),
+          ),
         ],
       ),
     );
@@ -660,20 +769,24 @@ class _DetailScreenState extends State<_DetailScreen> {
   Widget _stat(String value, String label, Color? valueColor) {
     return Column(
       children: [
-        Text(value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: valueColor ?? const Color(0xFF111111),
-            )),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: valueColor ?? const Color(0xFF111111),
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.4,
-              color: Color(0xFF9CA3AF),
-            )),
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.4,
+            color: Color(0xFF9CA3AF),
+          ),
+        ),
       ],
     );
   }
@@ -694,14 +807,17 @@ class _DetailScreenState extends State<_DetailScreen> {
               Container(
                 width: 22,
                 height: 22,
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: accent, shape: BoxShape.circle),
                 child: const Center(
-                  child: Text('✓',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      )),
+                  child: Text(
+                    '✓',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -717,9 +833,14 @@ class _DetailScreenState extends State<_DetailScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(body,
-              style: const TextStyle(
-                  fontSize: 14, height: 1.5, color: Color(0xFF111111))),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: Color(0xFF111111),
+            ),
+          ),
         ],
       ),
     );
@@ -730,9 +851,7 @@ class _DetailScreenState extends State<_DetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _comments.isEmpty
-              ? 'COMMENTS'
-              : 'COMMENTS · ${_comments.length}',
+          _comments.isEmpty ? 'COMMENTS' : 'COMMENTS · ${_comments.length}',
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -750,34 +869,52 @@ class _DetailScreenState extends State<_DetailScreen> {
           ),
           child: Column(
             children: [
-              TextField(
-                controller: _commentCtrl,
-                maxLength: 1000,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Add a comment…',
-                  border: InputBorder.none,
-                  counterText: '',
+              Semantics(
+                label: 'Request comment',
+                textField: true,
+                child: TextField(
+                  controller: _commentCtrl,
+                  maxLength: 1000,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Add a comment…',
+                    border: InputBorder.none,
+                    counterText: '',
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('${_commentCtrl.text.length}/1000',
-                      style: const TextStyle(
-                          fontSize: 11, color: Color(0xFF9CA3AF))),
-                  ElevatedButton(
-                    onPressed: _posting ? null : _postComment,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                  Text(
+                    '${_commentCtrl.text.length}/1000',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF9CA3AF),
                     ),
-                    child: Text(_posting ? 'Posting…' : 'Post'),
+                  ),
+                  Semantics(
+                    button: true,
+                    label: _posting
+                        ? 'Posting request comment'
+                        : 'Post request comment',
+                    excludeSemantics: true,
+                    child: ElevatedButton(
+                      onPressed: _posting ? null : _postComment,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(_posting ? 'Posting…' : 'Post'),
+                    ),
                   ),
                 ],
               ),
@@ -804,7 +941,7 @@ class _DetailScreenState extends State<_DetailScreen> {
   }
 
   Widget _commentRow(FlutterRequestComment c, Color accent) {
-    final isTeam = c.isFromTeam;
+    final isViewer = c.viewerIsAuthor;
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
@@ -819,33 +956,40 @@ class _DetailScreenState extends State<_DetailScreen> {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isTeam ? accent : const Color(0xFFF3F4F6),
+                  color: isViewer ? accent : const Color(0xFFF3F4F6),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  isTeam ? 'Team' : 'Anon',
+                  isViewer ? 'You' : 'Anon',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: isTeam ? Colors.white : const Color(0xFF374151),
+                    color: isViewer ? Colors.white : const Color(0xFF374151),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 _formatRelative(c.createdAt),
-                style: const TextStyle(
-                    fontSize: 11, color: Color(0xFF9CA3AF)),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(c.body,
+          Semantics(
+            label: 'Request comment body: ${c.body}',
+            excludeSemantics: true,
+            child: Text(
+              c.body,
               style: const TextStyle(
-                  fontSize: 14, height: 1.4, color: Color(0xFF111111))),
+                fontSize: 14,
+                height: 1.4,
+                color: Color(0xFF111111),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -857,22 +1001,32 @@ class _DetailScreenState extends State<_DetailScreen> {
     required Color inactiveBg,
     required String label,
     required Color textColor,
-    required VoidCallback onPress,
+    required String semanticsLabel,
+    required VoidCallback? onPress,
   }) {
-    return ElevatedButton(
-      onPressed: onPress,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: active ? activeBg : inactiveBg,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Text(label,
+    return Semantics(
+      button: true,
+      enabled: onPress != null,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: ElevatedButton(
+        onPressed: onPress,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: active ? activeBg : inactiveBg,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(
+          label,
           style: TextStyle(
             color: textColor,
             fontSize: 15,
             fontWeight: FontWeight.w700,
-          )),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -959,7 +1113,8 @@ class _SubmitScreenState extends State<_SubmitScreen> {
           const Text(
             "Tell us what you'd like to see. Other users can upvote your "
             'idea, and the team will respond as work progresses.',
-            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.4),
+            style:
+                TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.4),
           ),
           const SizedBox(height: 20),
           _field(
@@ -1000,40 +1155,52 @@ class _SubmitScreenState extends State<_SubmitScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF111111))),
-            Text('${controller.text.length}/$maxLength',
-                style: const TextStyle(
-                    fontSize: 11, color: Color(0xFF9CA3AF))),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF111111),
+              ),
+            ),
+            Text(
+              '${controller.text.length}/$maxLength',
+              style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+            ),
           ],
         ),
         const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          maxLength: maxLength,
-          maxLines: multiline ? 6 : 1,
-          autofocus: autofocus,
-          decoration: InputDecoration(
-            counterText: '',
-            hintText: placeholder,
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE5E7EB), width: 1.5),
+        Semantics(
+          label:
+              label == 'Title' ? 'Suggestion title' : 'Suggestion description',
+          textField: true,
+          child: TextField(
+            controller: controller,
+            maxLength: maxLength,
+            maxLines: multiline ? 6 : 1,
+            autofocus: autofocus,
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: placeholder,
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    const BorderSide(color: Color(0xFFE5E7EB), width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: accent.withValues(alpha: 0.55),
+                  width: 1.5,
+                ),
+              ),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: accent.withOpacity(0.55), width: 1.5),
-            ),
+            onChanged: (_) => setState(() {}),
           ),
-          onChanged: (_) => setState(() {}),
         ),
       ],
     );
@@ -1049,13 +1216,26 @@ RequestSummary _voteSummary(RequestSummary r, bool next) => RequestSummary(
       description: r.description,
       status: r.status,
       upvoteCount: (r.upvoteCount + (next ? 1 : -1)).clamp(0, 1 << 30),
-      followerCount: next && !r.viewerIsFollowing
-          ? r.followerCount + 1
-          : r.followerCount,
+      followerCount:
+          next && !r.viewerIsFollowing ? r.followerCount + 1 : r.followerCount,
       createdAt: r.createdAt,
       statusChangedAt: r.statusChangedAt,
       viewerHasUpvoted: next,
       viewerIsFollowing: next ? true : r.viewerIsFollowing,
+    );
+
+RequestSummary _voteSummaryResult(RequestSummary r, RequestVote result) =>
+    RequestSummary(
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      upvoteCount: result.upvoteCount,
+      followerCount: result.followerCount,
+      createdAt: r.createdAt,
+      statusChangedAt: r.statusChangedAt,
+      viewerHasUpvoted: result.upvoted,
+      viewerIsFollowing: result.followed,
     );
 
 FeatureRequest _vote(FeatureRequest r, bool next) => FeatureRequest(
@@ -1092,6 +1272,44 @@ FeatureRequest _follow(FeatureRequest r, bool next) => FeatureRequest(
       lastRespondedAt: r.lastRespondedAt,
       viewerHasUpvoted: r.viewerHasUpvoted,
       viewerIsFollowing: next,
+      viewerIsSubmitter: r.viewerIsSubmitter,
+    );
+
+FeatureRequest _voteResult(FeatureRequest r, RequestVote result) =>
+    FeatureRequest(
+      id: r.id,
+      appId: r.appId,
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      devResponse: r.devResponse,
+      upvoteCount: result.upvoteCount,
+      followerCount: result.followerCount,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      statusChangedAt: r.statusChangedAt,
+      lastRespondedAt: r.lastRespondedAt,
+      viewerHasUpvoted: result.upvoted,
+      viewerIsFollowing: result.followed,
+      viewerIsSubmitter: r.viewerIsSubmitter,
+    );
+
+FeatureRequest _followResult(FeatureRequest r, RequestFollow result) =>
+    FeatureRequest(
+      id: r.id,
+      appId: r.appId,
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      devResponse: r.devResponse,
+      upvoteCount: r.upvoteCount,
+      followerCount: result.followerCount,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      statusChangedAt: r.statusChangedAt,
+      lastRespondedAt: r.lastRespondedAt,
+      viewerHasUpvoted: r.viewerHasUpvoted,
+      viewerIsFollowing: result.following,
       viewerIsSubmitter: r.viewerIsSubmitter,
     );
 

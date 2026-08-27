@@ -17,7 +17,13 @@ class Consent {
   final bool? survey;
 
   /// Convenience: returns a copy with updated fields.
-  Consent copyWith({bool? analytics, bool? feedback, bool? push, bool? survey}) => Consent(
+  Consent copyWith({
+    bool? analytics,
+    bool? feedback,
+    bool? push,
+    bool? survey,
+  }) =>
+      Consent(
         analytics: analytics ?? this.analytics,
         feedback: feedback ?? this.feedback,
         push: push ?? this.push,
@@ -32,6 +38,14 @@ class Consent {
         if (survey != null) 'survey': survey,
       };
 
+  /// Fully-resolved wire form. The API consent log requires all four values.
+  Map<String, Object?> toResolvedJson() => <String, Object?>{
+        'analytics': analytics ?? false,
+        'feedback': feedback ?? false,
+        'push': push ?? false,
+        'survey': survey ?? false,
+      };
+
   /// Parses a consent object from JSON. Missing keys become `null`.
   factory Consent.fromJson(Map<String, Object?> json) => Consent(
         analytics: json['analytics'] as bool?,
@@ -41,7 +55,8 @@ class Consent {
       );
 
   /// Whether the transport layer may ship data to the backend.
-  bool get allowsTransport => feedback == true || survey == true;
+  bool get allowsTransport =>
+      analytics == true || feedback == true || push == true || survey == true;
 
   /// Whether the SDK may register a device token and accept pushes.
   bool get allowsPush => push == true;

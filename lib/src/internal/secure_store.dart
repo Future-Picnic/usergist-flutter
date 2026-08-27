@@ -9,9 +9,9 @@
 // legacy store, copy it into the secure store and delete the legacy
 // entry. Subsequent reads stay in the secure store.
 //
-// Failures are non-fatal: flutter_secure_storage can fail on some
-// emulators / corrupt keystores. The caller tolerates a `null` read and
-// continues with a fresh anonymous id.
+// Failures are non-fatal. Credential-bearing values fail closed instead of
+// falling back to plaintext shared preferences; non-secret compatibility
+// state can still use the legacy store when secure storage is unavailable.
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -26,9 +26,10 @@ class SecureKeyValueStore implements KeyValueStore {
     FlutterSecureStorage? backend,
   })  : _prefix = 'usergist.${shortHash(writeKey)}.secure.',
         _legacy = legacy,
-        _backend = backend ?? const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
-        );
+        _backend = backend ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            );
 
   final String _prefix;
   final KeyValueStore _legacy;
@@ -40,7 +41,10 @@ class SecureKeyValueStore implements KeyValueStore {
   Future<String?> readString(String key) async {
     try {
       final secureValue = await _backend.read(key: _k(key));
-      if (secureValue != null) return secureValue;
+      if (secureValue != null) {
+        await _legacy.remove(key);
+        return secureValue;
+      }
     } on Object catch (err, st) {
       log.e('secure read failed', err, st);
     }
@@ -50,22 +54,45 @@ class SecureKeyValueStore implements KeyValueStore {
     try {
       await _backend.write(key: _k(key), value: legacyValue);
       await _legacy.remove(key);
+      return legacyValue;
     } on Object catch (err, st) {
       log.e('secure migration write failed', err, st);
+      if (_requiresSecureStorage(key)) {
+        await _legacy.remove(key);
+        return null;
+      }
     }
     return legacyValue;
   }
 
   @override
   Future<void> writeString(String key, String value) async {
+    await writeStringStrict(key, value);
+  }
+
+  /// Persists state and reports whether the appropriate backing store accepted
+  /// it. Credential keys never fall back to plaintext storage.
+  Future<bool> writeStringStrict(String key, String value) async {
     try {
       await _backend.write(key: _k(key), value: value);
+      return true;
     } on Object catch (err, st) {
       log.e('secure write failed', err, st);
-      // Fallback: keep the host app usable even if Keychain access fails.
+      if (_requiresSecureStorage(key)) {
+        await _legacy.remove(key);
+        return false;
+      }
+      final legacy = _legacy;
+      if (legacy is SharedPrefsStore) {
+        return legacy.writeStringStrict(key, value);
+      }
       await _legacy.writeString(key, value);
+      return true;
     }
   }
+
+  bool _requiresSecureStorage(String key) =>
+      key == 'session.subjectToken' || key == 'mutations.queue';
 
   @override
   Future<void> remove(String key) async {

@@ -8,15 +8,29 @@ void main() {
       'id': 'q1',
       'type': 'rating',
       'title': 'How was it?',
+      'imageUrl': 'https://example.com/rating.png',
       'scale': 5,
+      'display': 'emoji',
       'lowLabel': 'Bad',
       'highLabel': 'Great',
     });
     expect(q, isA<RatingQuestion>());
     final r = q as RatingQuestion;
     expect(r.scale, 5);
+    expect(r.display, RatingDisplayMode.emoji);
     expect(r.lowLabel, 'Bad');
     expect(r.highLabel, 'Great');
+    expect(r.imageUrl, 'https://example.com/rating.png');
+  });
+
+  test('defaults rating display to stars', () {
+    final q = Question.fromJson(<String, Object?>{
+      'id': 'q-default',
+      'type': 'rating',
+      'title': 'How was it?',
+      'scale': 5,
+    }) as RatingQuestion;
+    expect(q.display, RatingDisplayMode.stars);
   });
 
   test('decodes NPS question', () {
@@ -25,9 +39,14 @@ void main() {
       'type': 'nps',
       'title': 'Would you recommend us?',
       'followUp': 'Why?',
+      'lowLabel': 'Never',
+      'highLabel': 'Absolutely',
     });
     expect(q, isA<NpsQuestion>());
-    expect((q as NpsQuestion).followUp, 'Why?');
+    final nps = q as NpsQuestion;
+    expect(nps.followUp, 'Why?');
+    expect(nps.lowLabel, 'Never');
+    expect(nps.highLabel, 'Absolutely');
   });
 
   test('decodes multiple-choice question', () {
@@ -67,6 +86,7 @@ void main() {
     final at = ArmedTrigger.fromJson(<String, Object?>{
       'promptId': 'p1',
       'eventName': 'checkout_completed',
+      'clientSideEligible': false,
       'frequency': <String, Object?>{'perPromptDays': 30, 'perUserDays': 7},
       'segmentRules': <String, Object?>{
         'userProperties': <Object?>[
@@ -93,6 +113,7 @@ void main() {
     });
     expect(at.promptId, 'p1');
     expect(at.eventName, 'checkout_completed');
+    expect(at.clientSideEligible, isFalse);
     expect(at.frequency.perPromptDays, 30);
     expect(at.prompt.questions, hasLength(1));
     expect((at.prompt.questions.first as RatingQuestion).scale, 10);

@@ -70,6 +70,7 @@ class ArmedTrigger {
     required this.frequency,
     required this.prompt,
     this.segmentRules,
+    this.clientSideEligible,
   });
 
   /// The prompt id.
@@ -80,6 +81,9 @@ class ArmedTrigger {
 
   /// Optional segment predicates — `null` means "no segment constraints".
   final SerializedSegmentRules? segmentRules;
+
+  /// False when targeting must remain server-authoritative.
+  final bool? clientSideEligible;
 
   /// Frequency caps applied to this prompt.
   final FrequencyCaps frequency;
@@ -96,6 +100,7 @@ class ArmedTrigger {
       segmentRules: rawSeg is Map<String, Object?>
           ? SerializedSegmentRules.fromJson(rawSeg)
           : null,
+      clientSideEligible: json['clientSideEligible'] as bool?,
       frequency: FrequencyCaps.fromJson(
         (json['frequency'] as Map<String, Object?>?) ??
             const <String, Object?>{},
