@@ -6,8 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../internal/logger.dart';
 import '../models/survey.dart';
 import '../models/theme.dart';
-import 'theme_resolver.dart';
 import 'modal_coordinator.dart';
+import 'survey_rating_input.dart';
+import 'text_answer_decoration.dart';
+import 'theme_resolver.dart';
 
 class SurveyShowRequest {
   const SurveyShowRequest({
@@ -254,6 +256,13 @@ class _SurveyScreenState extends State<_SurveyScreen> {
                       ? Duration.zero
                       : const Duration(milliseconds: 220),
                   switchInCurve: Curves.easeOutCubic,
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  ),
                   child: _ended ? _endScreen(theme) : _questionScreen(theme),
                 ),
               ),
@@ -362,10 +371,16 @@ class _SurveyScreenState extends State<_SurveyScreen> {
                 FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.primary,
-                    foregroundColor: _contrastOn(theme.primary),
-                    minimumSize: const Size.fromHeight(48),
+                    disabledBackgroundColor: theme.primary.withValues(
+                      alpha: 0.4,
+                    ),
+                    foregroundColor: Colors.white,
+                    disabledForegroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(52),
                   ),
-                  onPressed: _submitting ? null : _advance,
+                  onPressed: _submitting || !_inlineNextEnabled(question)
+                      ? null
+                      : _advance,
                   child: _submitting
                       ? const SizedBox.square(
                           dimension: 20,
@@ -427,14 +442,21 @@ class _SurveyScreenState extends State<_SurveyScreen> {
           }).toList(growable: false),
         );
       case 'rating':
+        return SurveyRatingInput(
+          key: ValueKey<String>('survey-rating-${question.id}'),
+          question: question,
+          theme: theme,
+          initialValue: answer as int?,
+          onChanged: (value) {
+            if (value != null) _setRatingAndAdvance(question.id, value);
+          },
+        );
       case 'nps':
-        final start = question.type == 'nps' ? 0 : 1;
-        final end = question.type == 'nps' ? 10 : (question.scale ?? 5);
         return Wrap(
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
-            for (var value = start; value <= end; value++)
+            for (var value = 0; value <= 10; value++)
               ChoiceChip(
                 label: Text('$value'),
                 selected: answer == value,
@@ -470,16 +492,39 @@ class _SurveyScreenState extends State<_SurveyScreen> {
         );
       case 'short_text':
       case 'long_text':
-        return TextField(
-          controller: _textController,
-          minLines: question.type == 'long_text' ? 4 : 1,
-          maxLines: question.type == 'long_text' ? 8 : 3,
-          maxLength: question.maxLength,
-          decoration: InputDecoration(
-            hintText: question.placeholder,
-            border: const OutlineInputBorder(),
-          ),
-          onChanged: (value) => _setAnswer(question.id, value),
+        final isLongText = question.type == 'long_text';
+        final controller = _textController!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            TextField(
+              controller: controller,
+              minLines: isLongText ? 4 : 3,
+              maxLines: isLongText ? 8 : 6,
+              maxLength: question.maxLength,
+              cursorColor: theme.primary,
+              style: TextStyle(
+                color: theme.text,
+                fontFamily: theme.fontFamily,
+              ),
+              decoration: textAnswerDecoration(
+                theme: theme,
+                hintText: question.placeholder,
+              ),
+              onChanged: (value) => _setAnswer(question.id, value),
+            ),
+            if (isLongText && question.maxLength != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                '${controller.text.length} / ${question.maxLength}',
+                style: TextStyle(
+                  color: theme.subtext,
+                  fontSize: 12,
+                  fontFamily: theme.fontFamily,
+                ),
+              ),
+            ],
+          ],
         );
       case 'ranking':
         final ranking = _ranking ?? question.items;
@@ -588,11 +633,25 @@ class _SurveyScreenState extends State<_SurveyScreen> {
     unawaited(_advance());
   }
 
+  void _setRatingAndAdvance(String questionId, int value) {
+    _setAnswer(questionId, value);
+    Future<void>.delayed(const Duration(milliseconds: 220), () {
+      if (mounted && _currentId == questionId) unawaited(_advance());
+    });
+  }
+
   bool _autoAdvances(String type) =>
       type == 'single_choice' ||
       type == 'rating' ||
       type == 'nps' ||
       type == 'likert';
+
+  bool _inlineNextEnabled(SurveyQuestion question) {
+    if (question.type != 'short_text' && question.type != 'long_text') {
+      return true;
+    }
+    return _answered(_answers[question.id]);
+  }
 
   Future<void> _advance() async {
     final question = _current;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/question.dart';
+import '../text_answer_decoration.dart';
 import '../theme_resolver.dart';
 
 /// Widget rendering an [NpsQuestion] (0..10 scale).
@@ -68,6 +69,7 @@ class _NpsQuestionViewState extends State<NpsQuestionView> {
             onChanged: widget.onFollowUp,
             minLines: 3,
             maxLines: 5,
+            cursorColor: theme.primary,
             decoration: _inputDecoration(theme),
             style: TextStyle(color: theme.text, fontFamily: theme.fontFamily),
           ),
@@ -87,6 +89,7 @@ class _NpsQuestionViewState extends State<NpsQuestionView> {
       button: true,
       selected: selected,
       label: 'Score $value',
+      excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => widget.onScore(value),
@@ -135,18 +138,9 @@ class _NpsQuestionViewState extends State<NpsQuestionView> {
   }
 
   InputDecoration _inputDecoration(ResolvedPromptTheme theme) {
-    return InputDecoration(
+    return textAnswerDecoration(
+      theme: theme,
       hintText: 'Tell us more...',
-      hintStyle: TextStyle(color: theme.subtext),
-      contentPadding: const EdgeInsets.all(12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.primary),
-      ),
     );
   }
 }

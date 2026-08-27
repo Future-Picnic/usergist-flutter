@@ -5,8 +5,8 @@ import '../models/theme.dart';
 /// Resolves a [ResolvedPromptTheme] for the current [BuildContext] by
 /// layering (in order):
 ///   1. the host app's [Theme];
-///   2. the server-shipped prompt theme;
-///   3. the SDK caller's [UserGist.setThemeOverrides] payload.
+///   2. the SDK caller's global [UserGist.setThemeOverrides] payload;
+///   3. the server-shipped per-prompt theme.
 class ResolvedPromptTheme {
   /// Creates a resolved theme.
   const ResolvedPromptTheme({
@@ -60,7 +60,7 @@ class ResolvedPromptTheme {
       fontFamily:
           flutterTheme.textTheme.bodyMedium?.fontFamily ?? 'Plus Jakarta Sans',
     );
-    final merged = base.merge(serverTheme).merge(overrides);
+    final merged = base.merge(overrides).merge(serverTheme);
     return ResolvedPromptTheme(
       primary: merged.colors?.primary ?? colorScheme.primary,
       background: merged.colors?.background ?? colorScheme.surface,

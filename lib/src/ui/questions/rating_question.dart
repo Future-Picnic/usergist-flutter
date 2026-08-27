@@ -66,6 +66,7 @@ class _RatingQuestionViewState extends State<RatingQuestionView> {
               button: true,
               selected: selected,
               label: 'Rate $v',
+              excludeSemantics: true,
               child: GestureDetector(
                 onTap: () {
                   setState(() => _value = v);
@@ -126,7 +127,9 @@ class _RatingQuestionViewState extends State<RatingQuestionView> {
               '★',
               style: TextStyle(
                 color: filled ? theme.primary : theme.border,
-                fontSize: 28,
+                // Optical compensation for Flutter's smaller Android star
+                // glyph inside the same 36px target used by React Native.
+                fontSize: 32,
                 height: 1,
               ),
             ),

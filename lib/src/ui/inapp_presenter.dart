@@ -294,16 +294,19 @@ class _InAppSurfaceState extends State<_InAppSurface> {
                   ),
                 Align(
                   alignment: AlignmentDirectional.centerEnd,
-                  child: IconButton(
-                    tooltip:
-                        MaterialLocalizations.of(context).closeButtonTooltip,
-                    constraints:
-                        const BoxConstraints.tightFor(width: 48, height: 48),
-                    onPressed: () => Navigator.of(context).pop(
-                      const _InAppOutcome.dismissed(),
+                  child: Semantics(
+                    button: true,
+                    label: 'Close',
+                    excludeSemantics: true,
+                    child: IconButton(
+                      constraints:
+                          const BoxConstraints.tightFor(width: 48, height: 48),
+                      onPressed: () => Navigator.of(context).pop(
+                        const _InAppOutcome.dismissed(),
+                      ),
+                      icon: const Icon(Icons.close),
+                      color: theme.text,
                     ),
-                    icon: const Icon(Icons.close),
-                    color: theme.text,
                   ),
                 ),
                 if (widget.message.imageUrl case final imageUrl?)

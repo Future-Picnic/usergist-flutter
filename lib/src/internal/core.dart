@@ -19,6 +19,7 @@ import 'consent_store.dart';
 import 'device_context.dart';
 import 'event_queue.dart';
 import 'identity.dart';
+import 'instruction_dedupe.dart';
 import 'json.dart';
 import 'lifecycle/app_lifecycle.dart';
 import 'logger.dart';
@@ -89,6 +90,7 @@ class UserGistCore {
   late final ConsentStore _consent;
   late final EventQueue _queue;
   late final MutationQueue _mutations;
+  late final LocalInstructionDedupe _localInstructionDedupe;
   late final SurveyStore _surveyStore;
   late final RulesCache _rulesCache;
   late final CampaignRulesCache _campaignRules;
@@ -119,7 +121,6 @@ class UserGistCore {
   final Map<String, Map<int, int>> _eventCounts = <String, Map<int, int>>{};
   final Map<String, DateTime> _lastEventAt = <String, DateTime>{};
   final Map<String, List<DateTime>> _eventHistory = <String, List<DateTime>>{};
-  final Set<String> _locallyHandledInstructionKeys = <String>{};
   final Map<String, DateTime> _surveyCooldownByCampaign = <String, DateTime>{};
   final Set<String> _pendingPromptCapIds = <String>{};
   final Set<String> _pendingSurveyCapIds = <String>{};
@@ -186,12 +187,14 @@ class UserGistCore {
     identity = IdentityStore(_secureStore);
     _consent = ConsentStore(_secureStore);
     _mutations = MutationQueue(_secureStore);
+    _localInstructionDedupe = LocalInstructionDedupe(_kv);
     _surveyStore = SurveyStore(_kv);
     _freqCaps = FrequencyCapStore(_kv);
     await Future.wait<void>(<Future<void>>[
       identity.hydrate(),
       _consent.hydrate(),
       _mutations.hydrate(),
+      _localInstructionDedupe.hydrate(),
       _surveyStore.hydrate(),
       _freqCaps.hydrate(),
     ]);
@@ -636,12 +639,14 @@ class UserGistCore {
       dedupeKey: 'survey-complete:$attemptId',
     );
     final rejected = await _flushMutations();
-    final delivered = !_resetInProgress &&
+    // Once encrypted persistence accepts the completion, the survey is done
+    // from the user's perspective. A queued mutation is retried by lifecycle
+    // sync and must not force the user to submit the same answers again.
+    final accepted = !_resetInProgress &&
         _resetGeneration == deliveryGeneration &&
-        !_mutations.contains(mutationId) &&
         !rejected.contains(mutationId);
-    if (delivered) await _surveyStore.removeAttempt(attemptId);
-    return delivered;
+    if (accepted) await _surveyStore.removeAttempt(attemptId);
+    return accepted;
   }
 
   Future<bool> abandonSurvey(String attemptId) async {
@@ -696,6 +701,7 @@ class UserGistCore {
       await _kv.remove(_instructionCursorKey);
       await _kv.remove(_seenInstructionsKey);
       await _kv.remove(_eventHistoryKey);
+      await _localInstructionDedupe.clear();
       _subjectToken = null;
       _lastPushToken = null;
       _api.setSubjectToken(null);
@@ -703,7 +709,6 @@ class UserGistCore {
       _eventCounts.clear();
       _lastEventAt.clear();
       _eventHistory.clear();
-      _locallyHandledInstructionKeys.clear();
       _surveyCooldownByCampaign.clear();
       _pendingPromptCapIds.clear();
       _pendingSurveyCapIds.clear();
@@ -885,7 +890,7 @@ class UserGistCore {
         final triggerEventId = payload['triggerEventId'];
         if (promptId is String &&
             triggerEventId is String &&
-            _locallyHandledInstructionKeys.remove(
+            _localInstructionDedupe.consume(
               _instructionKey('prompt.show', promptId, triggerEventId),
             )) {
           return;
@@ -905,7 +910,7 @@ class UserGistCore {
       if (surveyId is! String || name is! String) return;
       final triggerEventId = payload['triggerEventId'];
       if (triggerEventId is String &&
-          _locallyHandledInstructionKeys.remove(
+          _localInstructionDedupe.consume(
             _instructionKey('survey.offer', surveyId, triggerEventId),
           )) {
         return;
@@ -929,7 +934,7 @@ class UserGistCore {
         if (message.messageId.isEmpty || message.title.isEmpty) return;
         final triggerEventId = payload['triggerEventId'];
         if (triggerEventId is String &&
-            _locallyHandledInstructionKeys.remove(
+            _localInstructionDedupe.consume(
               _instructionKey(
                 'inapp.show',
                 message.messageId,
@@ -1463,12 +1468,7 @@ class UserGistCore {
   }
 
   void _rememberLocalInstruction(String key) {
-    _locallyHandledInstructionKeys.add(key);
-    while (_locallyHandledInstructionKeys.length > 200) {
-      _locallyHandledInstructionKeys.remove(
-        _locallyHandledInstructionKeys.first,
-      );
-    }
+    _localInstructionDedupe.remember(key);
   }
 
   Future<void> _syncTriggers() async {

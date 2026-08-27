@@ -115,7 +115,7 @@ class PromptPresenter {
           isScrollControlled: true,
           enableDrag: false,
           backgroundColor: Colors.transparent,
-          barrierColor: Colors.black.withAlpha(128),
+          barrierColor: Colors.black.withAlpha(102),
           builder: (_) => PromptSheet(
             prompt: req.prompt,
             themeOverrides: themeOverrides,

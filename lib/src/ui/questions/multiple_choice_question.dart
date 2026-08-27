@@ -45,6 +45,7 @@ class _MultipleChoiceQuestionViewState
               button: true,
               selected: _selected.contains(opt.id),
               label: opt.label,
+              excludeSemantics: true,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _toggle(opt.id),

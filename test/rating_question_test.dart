@@ -36,6 +36,10 @@ void main() {
 
     expect(find.text('★'), findsNWidgets(5));
     expect(find.text('1'), findsNothing);
+    final star = tester.widget<Text>(find.text('★').first);
+    expect(star.style?.fontSize, 32);
+    final semantics = tester.getSemantics(find.bySemanticsLabel('Rate 5'));
+    expect(semantics.label, 'Rate 5');
     await tester.tap(find.text('★').at(3));
     expect(answer, 4);
   });

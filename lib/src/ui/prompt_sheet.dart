@@ -40,7 +40,7 @@ class PromptSheet extends StatefulWidget {
   /// The prompt to render.
   final ClientPrompt prompt;
 
-  /// Caller-supplied theme overrides (merged over the server theme).
+  /// Caller-supplied global theme (merged under the per-prompt server theme).
   final PromptTheme? themeOverrides;
 
   @override
@@ -199,7 +199,9 @@ class _PromptSheetState extends State<PromptSheet> {
           textAlign: centered ? TextAlign.center : TextAlign.start,
           style: TextStyle(
             color: theme.text,
-            fontSize: 18,
+            // Flutter's Android glyph metrics render the same nominal size
+            // smaller than the React Native reference.
+            fontSize: 20,
             fontWeight: FontWeight.w700,
             fontFamily: theme.fontFamily,
           ),
