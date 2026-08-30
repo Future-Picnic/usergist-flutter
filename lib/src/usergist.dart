@@ -347,15 +347,26 @@ class UserGist {
     int index,
   ) {
     _core?.reportInAppCta(messageId, cta, index);
-    inAppHandlers.onCtaClick?.call(
-      InAppCtaClick(
-        messageId: messageId,
-        action: cta.action,
-        target: cta.target,
-        label: cta.label,
-        index: index,
-      ),
+    final click = InAppCtaClick(
+      messageId: messageId,
+      action: cta.action,
+      target: cta.target,
+      label: cta.label,
+      index: index,
+      actionJson: cta.actionJson,
     );
+    try {
+      inAppHandlers.onCtaClick?.call(click);
+    } on Object {
+      // Host callbacks cannot interrupt action dispatch or modal cleanup.
+    }
+    if (cta.action == 'json' && cta.actionJson != null) {
+      try {
+        inAppHandlers.onJsonAction?.call(cta.actionJson!, click);
+      } on Object {
+        // Host action executors must not throw across the SDK boundary.
+      }
+    }
   }
 
   static Future<void> internalSaveSurveyProgress(

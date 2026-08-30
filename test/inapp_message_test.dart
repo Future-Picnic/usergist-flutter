@@ -48,4 +48,28 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('decodes a JSON in-app action', () {
+    final message = ArmedInAppMessage.fromJson(<String, Object?>{
+      'messageId': 'message-json',
+      'format': 'modal',
+      'title': 'Selected offer',
+      'ctas': <Object?>[
+        <String, Object?>{
+          'label': 'Show price',
+          'action': 'json',
+          'actionJson': <String, Object?>{
+            'type': 'show_special_price',
+            'price': 19,
+          },
+        },
+      ],
+    });
+
+    expect(message.ctas.single.action, 'json');
+    expect(message.ctas.single.actionJson, <String, Object?>{
+      'type': 'show_special_price',
+      'price': 19,
+    });
+  });
 }
