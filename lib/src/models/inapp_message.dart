@@ -75,11 +75,13 @@ class InAppCta {
     required this.label,
     required this.action,
     this.target,
+    this.actionJson,
   });
 
   final String label;
   final String action;
   final String? target;
+  final Map<String, Object?>? actionJson;
 
   factory InAppCta.fromJson(Map<String, Object?> json) {
     final action = json['action'] as String? ?? 'dismiss';
@@ -88,6 +90,7 @@ class InAppCta {
       'deep_link',
       'dismiss',
       'custom_event',
+      'json',
     }.contains(action)) {
       throw const FormatException('unsupported in-app CTA action');
     }
@@ -95,6 +98,11 @@ class InAppCta {
       label: json['label'] as String? ?? '',
       action: action,
       target: json['target'] as String?,
+      actionJson: json['actionJson'] is Map<Object?, Object?>
+          ? Map<String, Object?>.from(
+              json['actionJson'] as Map<Object?, Object?>,
+            )
+          : null,
     );
   }
 }
@@ -107,6 +115,7 @@ class InAppCtaClick {
     required this.label,
     required this.index,
     this.target,
+    this.actionJson,
   });
 
   final String messageId;
@@ -114,6 +123,7 @@ class InAppCtaClick {
   final String? target;
   final String label;
   final int index;
+  final Map<String, Object?>? actionJson;
 }
 
 /// Optional lifecycle callbacks for SDK-rendered in-app messages.
@@ -122,9 +132,12 @@ class InAppHandlers {
     this.onShow,
     this.onDismiss,
     this.onCtaClick,
+    this.onJsonAction,
   });
 
   final void Function(String messageId)? onShow;
   final void Function(String messageId, String reason)? onDismiss;
   final void Function(InAppCtaClick click)? onCtaClick;
+  final void Function(Map<String, Object?> action, InAppCtaClick click)?
+      onJsonAction;
 }

@@ -4,6 +4,8 @@
 /// They forward tokens and payloads here.
 library;
 
+import 'dart:convert';
+
 import '../usergist.dart';
 
 enum PushPermissionStatus {
@@ -23,6 +25,7 @@ class UserGistPushMessage {
     this.deepLink,
     this.title,
     this.body,
+    this.actionButtons = const <PushActionButton>[],
   });
 
   final String? campaignId;
@@ -32,6 +35,7 @@ class UserGistPushMessage {
   final String? deepLink;
   final String? title;
   final String? body;
+  final List<PushActionButton> actionButtons;
 
   static UserGistPushMessage? parseIos(Map<String, Object?> userInfo) {
     final usergist = userInfo['usergist'];
@@ -50,6 +54,7 @@ class UserGistPushMessage {
       deepLink: usergistMap['deepLink'] as String?,
       title: alert?['title'] as String?,
       body: alert?['body'] as String?,
+      actionButtons: PushActionButton.parseList(usergistMap['actionButtons']),
     );
   }
 
@@ -68,7 +73,46 @@ class UserGistPushMessage {
       deepLink: data['usergist_deep_link'],
       title: title,
       body: body,
+      actionButtons: PushActionButton.parseList(data['usergist_actions']),
     );
+  }
+}
+
+class PushActionButton {
+  const PushActionButton({
+    required this.label,
+    required this.action,
+    this.target,
+    this.actionJson,
+  });
+
+  final String label;
+  final String action;
+  final String? target;
+  final Map<String, Object?>? actionJson;
+
+  static List<PushActionButton> parseList(Object? value) {
+    Object? candidate = value;
+    if (candidate is String) {
+      try {
+        candidate = jsonDecode(candidate);
+      } on FormatException {
+        return const <PushActionButton>[];
+      }
+    }
+    if (candidate is! List) return const <PushActionButton>[];
+    return candidate.whereType<Map<Object?, Object?>>().map((raw) {
+      final map = Map<String, Object?>.from(raw);
+      final json = map['actionJson'];
+      return PushActionButton(
+        label: map['label'] as String? ?? '',
+        action: map['action'] as String? ?? 'open_app',
+        target: map['target'] as String?,
+        actionJson: json is Map<Object?, Object?>
+            ? Map<String, Object?>.from(json)
+            : null,
+      );
+    }).toList(growable: false);
   }
 }
 
@@ -78,6 +122,11 @@ typedef OnReceive = void Function(
 );
 typedef OnOpen = void Function(UserGistPushMessage message);
 typedef OnAction = void Function(
+  UserGistPushMessage message,
+  String actionButton,
+);
+typedef OnJsonAction = void Function(
+  Map<String, Object?> action,
   UserGistPushMessage message,
   String actionButton,
 );
@@ -93,6 +142,7 @@ class PushHandlers {
     this.onReceive,
     this.onOpen,
     this.onAction,
+    this.onJsonAction,
     this.onDismiss,
     this.onSilent,
     this.onEvent,
@@ -101,6 +151,7 @@ class PushHandlers {
   OnReceive? onReceive;
   OnOpen? onOpen;
   OnAction? onAction;
+  OnJsonAction? onJsonAction;
   OnDismiss? onDismiss;
   OnSilent? onSilent;
   OnPushEvent? onEvent;
@@ -284,7 +335,36 @@ class Push {
         ..._eventProperties(msg),
         'action_button': actionIdentifier,
       });
-      _handlers.onAction?.call(msg, actionIdentifier);
+      try {
+        _handlers.onAction?.call(msg, actionIdentifier);
+      } on Object {
+        // A host observer cannot prevent the configured action from running.
+      }
+      final match =
+          RegExp(r'^usergist_action_(\d+)$').firstMatch(actionIdentifier);
+      final index = match == null ? null : int.tryParse(match.group(1)!);
+      PushActionButton? button;
+      if (index != null && index >= 0 && index < msg.actionButtons.length) {
+        button = msg.actionButtons[index];
+      } else {
+        for (final candidate in msg.actionButtons) {
+          if (candidate.label == actionIdentifier) {
+            button = candidate;
+            break;
+          }
+        }
+      }
+      if (button?.action == 'json' && button?.actionJson != null) {
+        try {
+          _handlers.onJsonAction?.call(
+            button!.actionJson!,
+            msg,
+            actionIdentifier,
+          );
+        } on Object {
+          // Host action executors must not throw across the SDK boundary.
+        }
+      }
     } else {
       UserGist.track(
         '\$push_opened',
