@@ -219,7 +219,7 @@ class _SurveyScreenState extends State<_SurveyScreen> {
     );
     return PopScope(
       canPop: _ended,
-      onPopInvokedWithResult: (didPop, _) {
+      onPopInvoked: (didPop) {
         if (!didPop) unawaited(_requestClose());
       },
       child: Scaffold(
@@ -371,9 +371,7 @@ class _SurveyScreenState extends State<_SurveyScreen> {
                 FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.primary,
-                    disabledBackgroundColor: theme.primary.withValues(
-                      alpha: 0.4,
-                    ),
+                    disabledBackgroundColor: theme.primary.withAlpha(102),
                     foregroundColor: Colors.white,
                     disabledForegroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(52),

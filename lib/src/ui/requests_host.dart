@@ -160,9 +160,9 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: color.withAlpha(26),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withAlpha(89)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -364,7 +364,7 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accentSoft = accent.withValues(alpha: 0.10);
+    final accentSoft = accent.withAlpha(26);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -696,7 +696,7 @@ class _DetailScreenState extends State<_DetailScreen> {
                       child: _actionBtn(
                         active: data.viewerHasUpvoted,
                         activeBg: accent,
-                        inactiveBg: accent.withValues(alpha: 0.15),
+                        inactiveBg: accent.withAlpha(38),
                         label: data.viewerHasUpvoted
                             ? '▲ Upvoted (${data.upvoteCount})'
                             : '▲ Upvote (${data.upvoteCount})',
@@ -1194,7 +1194,7 @@ class _SubmitScreenState extends State<_SubmitScreen> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color: accent.withValues(alpha: 0.55),
+                  color: accent.withAlpha(140),
                   width: 1.5,
                 ),
               ),

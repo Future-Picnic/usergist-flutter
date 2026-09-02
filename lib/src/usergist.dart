@@ -285,6 +285,10 @@ class UserGist {
   /// Current anonymous identifier (empty string before [init]).
   static String get anonymousId => _core?.identity.anonymousId ?? '';
 
+  /// Stable identified-user ID accepted by the server, or null while the
+  /// installation is anonymous.
+  static String? get externalId => _core?.identity.externalId;
+
   /// Broadcast stream of prompt ids as they are shown on-device.
   static Stream<String> get onPromptShown =>
       _core?.onPromptShown ?? const Stream<String>.empty();
@@ -309,6 +313,7 @@ class UserGist {
     _core?.reportShown(promptId);
   }
 
+  /// Internal: releases a reserved prompt after presentation fails.
   static void internalReportPromptPresentationFailed(String promptId) {
     _core?.releasePromptReservation(promptId);
   }
@@ -369,6 +374,7 @@ class UserGist {
     }
   }
 
+  /// Internal: persists the SDK-owned survey presenter's current answers.
   static Future<void> internalSaveSurveyProgress(
     String attemptId,
     String? currentQuestionId,
@@ -377,28 +383,34 @@ class UserGist {
     await _core?.saveSurveyProgress(attemptId, currentQuestionId, answers);
   }
 
+  /// Internal: submits an SDK-owned survey attempt exactly once.
   static Future<bool> internalCompleteSurvey(
     String attemptId,
     Map<String, Object?> answers,
   ) async =>
       await _core?.completeSurvey(attemptId, answers) ?? false;
 
+  /// Internal: marks a started survey attempt as abandoned.
   static Future<bool> internalAbandonSurvey(String attemptId) async =>
       await _core?.abandonSurvey(attemptId) ?? false;
 
+  /// Internal: reports successful survey presentation to the runtime.
   static void internalReportSurveyShown(String surveyId) {
     _core?.reportSurveyShown(surveyId);
     surveyHandlers.onShow?.call(surveyId);
   }
 
+  /// Internal: releases a reserved survey after presentation fails.
   static void internalReportSurveyPresentationFailed(String surveyId) {
     _core?.releaseSurveyReservation(surveyId);
   }
 
+  /// Internal: forwards a completed survey lifecycle event to the host.
   static void internalReportSurveyComplete(String surveyId, String attemptId) {
     surveyHandlers.onComplete?.call(surveyId, attemptId);
   }
 
+  /// Internal: forwards an abandoned survey lifecycle event to the host.
   static void internalReportSurveyAbandon(String surveyId, String attemptId) {
     surveyHandlers.onAbandon?.call(surveyId, attemptId);
   }
@@ -427,7 +439,7 @@ class UserGist {
       final core = _core;
       if (core == null) return const <SurveySummary>[];
       if (core.consent.allowsSurvey != true) return const <SurveySummary>[];
-      return core.getAvailableSurveys();
+      return await core.getAvailableSurveys();
     } on Object catch (err, st) {
       log.e('getAvailableSurveys failed', err, st);
       return const <SurveySummary>[];
@@ -476,6 +488,7 @@ class UserGist {
   // ---------------- Feature Requests (5th pillar) ----------------
   // HTTP transport, optimistic state, search, and SDK-owned UI are wired.
 
+  /// Host-app lifecycle handlers for the SDK-owned feature-request surface.
   static RequestsHandlers requestsHandlers = const RequestsHandlers();
 
   /// Open the SDK-provided requests board UI. Drop-in: as long as the

@@ -393,7 +393,7 @@ class UserGistCore {
         'environment': environment,
         'language': null,
         'timezone': DateTime.now().timeZoneName,
-        'sdkVersion': '0.1.0',
+        'sdkVersion': sdkVersion,
         'optIn': true,
       },
     );

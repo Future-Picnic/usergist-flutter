@@ -104,10 +104,12 @@ class DefaultApiUrls {
   DefaultApiUrls._();
 
   /// Production API.
-  static const String production = 'https://api.usergist.studio';
+  static const String production = 'https://api.usergist.com';
 
   /// Staging API.
-  static const String staging = 'https://api.staging.usergist.studio';
+  /// Staging identifies customer app data; it is served by the same public
+  /// UserGist edge and isolated by app id and write key.
+  static const String staging = 'https://api.usergist.com';
 
   /// Development API (local or dev cluster).
   static const String development = 'http://localhost:28743';

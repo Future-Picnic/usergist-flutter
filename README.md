@@ -1,9 +1,8 @@
 # usergist_feedback
 
-Experimental Flutter SDK for [userGist](https://usergist.studio). It implements
-the React Native reference protocol, but is not launch-supported until package
-release validation and physical-device push testing are complete. Consult
-`packages/PARITY.md` before production integration.
+Flutter SDK for [userGist](https://usergist.com). It implements
+the same authenticated protocol and durable-delivery guarantees as the native
+and React Native SDKs.
 
 ## Install
 
@@ -80,12 +79,15 @@ device are required for end-to-end validation.
 
 ```sh
 flutter test
-flutter analyze --no-fatal-infos --no-fatal-warnings
+flutter analyze --no-fatal-infos
+dart doc
+dart pub publish --dry-run
 ```
 
-The analyzer currently reports the package's existing lint backlog; compilation
-errors are treated as failures.
+All analyzer errors and warnings are release-blocking. Documentation-only info
+diagnostics remain visible, and the public Dart API must generate with zero
+dartdoc warnings or errors.
 
 ## License
 
-MIT
+MIT © 2025-2026 userGist
