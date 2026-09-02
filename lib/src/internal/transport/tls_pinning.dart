@@ -1,5 +1,5 @@
 // PORTED FROM (concept): cross-platform TLS pinning (P5.4). The pinned
-// host is `api.usergist.studio`; pins are base64 SHA-256 of the leaf cert's
+// host is `api.usergist.com`; pins are base64 SHA-256 of the leaf cert's
 // raw DER. Two pins (leaf + backup) prevent a single rotation from
 // bricking every install.
 //
@@ -76,7 +76,7 @@ class TlsPinEnv {
   TlsPinEnv._();
   static const String leaf = 'USERGIST_TLS_PIN_LEAF';
   static const String backup = 'USERGIST_TLS_PIN_BACKUP';
-  static const String pinnedHost = 'api.usergist.studio';
+  static const String pinnedHost = 'api.usergist.com';
 }
 
 /// Default pin set used by the Flutter SDK. Pin material is sourced from
