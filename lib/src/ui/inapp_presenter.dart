@@ -150,7 +150,7 @@ class InAppPresenter {
         useSafeArea: true,
         backgroundColor: Colors.transparent,
         barrierColor: message.backdropEnabled
-            ? Colors.black.withValues(alpha: 0.4)
+            ? Colors.black.withAlpha(102)
             : Colors.transparent,
         builder: (routeContext) => _InAppSurface(
           message: message,
@@ -166,7 +166,7 @@ class InAppPresenter {
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: message.format == 'modal_full' || !message.backdropEnabled
           ? Colors.transparent
-          : Colors.black.withValues(alpha: 0.4),
+          : Colors.black.withAlpha(102),
       transitionDuration: const Duration(milliseconds: 220),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(

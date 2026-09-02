@@ -439,7 +439,7 @@ class UserGist {
       final core = _core;
       if (core == null) return const <SurveySummary>[];
       if (core.consent.allowsSurvey != true) return const <SurveySummary>[];
-      return core.getAvailableSurveys();
+      return await core.getAvailableSurveys();
     } on Object catch (err, st) {
       log.e('getAvailableSurveys failed', err, st);
       return const <SurveySummary>[];
