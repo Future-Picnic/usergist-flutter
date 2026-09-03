@@ -72,8 +72,11 @@ Push token lifecycle, silent acks, beacons, channel preferences, and host-
 forwarded receive/open/action/dismiss callbacks are implemented. Flutter apps
 must still own APNs/FCM permission and delivery plumbing (for example through
 their existing messaging package); automatic enable/disable, badge, and initial-
-notification helpers are not yet mirrored. Real credentials and a physical
-device are required for end-to-end validation.
+notification helpers are not yet mirrored. The userGist APNs and FCM delivery
+paths have passed end-to-end physical-device validation. Every integrating app
+must still provide its own provider credentials and platform identifiers,
+forward callbacks from its messaging package, and test its signed build on its
+own physical devices.
 
 ## Verification
 
