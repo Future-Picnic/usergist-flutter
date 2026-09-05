@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 
 import '../models/any_value.dart';
 import '../push/push.dart';
@@ -838,7 +838,9 @@ class UserGistCore {
       }
       final result = await _api.getJson(
         SdkEndpoints.instructions,
-        query: <String, String>{'after': '$after', 'limit': '100'},
+        query: <String, String>{'after': '$after', 'limit': '100',
+          'protocolVersion': '2', 'platform': Platform.isIOS ? 'ios' : 'android',
+          'anonymousId': identity.anonymousId, 'sdkVersion': sdkVersion},
       );
       if (!result.success) return;
       final raw = result.data?['instructions'];
