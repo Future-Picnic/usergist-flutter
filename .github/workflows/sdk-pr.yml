@@ -1,0 +1,38 @@
+name: Public SDK validation
+run-name: SDK snapshot ${{ inputs.snapshot }}
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: Immutable public SDK snapshot commit
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: public-sdk-${{ inputs.snapshot }}
+  cancel-in-progress: false
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [stable, '3.19.6']
+    defaults:
+      run:
+        working-directory: packages/sdk-flutter
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.snapshot }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: ${{ matrix.version != 'stable' && matrix.version || '' }}
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
+      - run: dart pub publish --dry-run
