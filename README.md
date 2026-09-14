@@ -8,7 +8,36 @@ and React Native SDKs.
 
 ```yaml
 dependencies:
-  usergist_feedback: ^0.1.0
+  usergist_feedback: ^0.1.3
+```
+
+Initialization finishes after local storage is hydrated. Session and mutation
+warm-up continue in the background, so offline networking does not delay
+`runApp`. Host rendering must not wait for consent/identity network confirmation.
+
+## Startup presentation readiness
+
+Initialize with `presentationPaused` enabled at app launch. Analytics, consent,
+identity, and networking continue while campaign UI waits. After the existing
+startup loading and navigation have finished and the loaded screen is visible,
+call `resumePresentation()`. Mount any required UserGist UI provider before that
+callback. Readiness must work for both anonymous and identified users.
+
+Call `pausePresentation()` before another flow that must not be interrupted.
+Pausing does not dismiss an already visible SDK surface. Queued feedback,
+surveys, and in-app messages are discarded if their consent is withdrawn or
+the user changes, even if consent is granted again before resuming. Repeated
+initialization keeps the first readiness setting; repeated resume calls do not
+show the same queued work twice. The option defaults to false for existing
+integrations, so upgrading alone does not enable startup deferral.
+
+Do not resume from a splash screen, an app-root mount that still shows loading,
+a disappearing screen, or a fixed timer. Use the host's existing completion
+callback; the SDK cannot infer when arbitrary startup navigation has finished.
+
+```dart
+// In the loaded screen’s existing startup/navigation completion callback:
+UserGist.resumePresentation();
 ```
 
 ## Usage
@@ -19,7 +48,7 @@ import 'package:usergist_feedback/usergist_feedback.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await UserGist.init(writeKey: 'rk_live_xxx');
+  await UserGist.init(writeKey: 'rk_live_xxx', presentationPaused: true);
   await UserGist.setConsent(
     const Consent(analytics: true, feedback: true, survey: true),
   );

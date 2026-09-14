@@ -51,7 +51,7 @@ class _UserGistProviderState extends State<UserGistProvider> {
   @override
   void initState() {
     super.initState();
-    _modalCoordinator = SdkModalCoordinator();
+    _modalCoordinator = SdkModalCoordinator(gate: UserGist.internalPresentationGate);
     _presenter = PromptPresenter(
       stream: UserGist.internalShowStream,
       onShown: UserGist.internalReportShown,

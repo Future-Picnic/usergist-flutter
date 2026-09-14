@@ -13,10 +13,12 @@ import 'modal_coordinator.dart';
 /// from the SDK core to the UI layer.
 class PromptShowRequest {
   /// Creates a request.
-  const PromptShowRequest({required this.prompt});
+  const PromptShowRequest({required this.prompt, this.isValid});
 
   /// Prompt to show.
   final ClientPrompt prompt;
+
+  final bool Function()? isValid;
 }
 
 /// Callback signature used by [PromptPresenter] to report the
@@ -140,7 +142,7 @@ class PromptPresenter {
             latencyMs: latency,
           ),
         );
-      });
+      }, isValid: req.isValid);
     } on Object catch (err, st) {
       onPresentationFailed(req.prompt.id);
       log.e('prompt presentation failed', err, st);

@@ -1,4 +1,15 @@
+## 0.1.3
+
+- Complete initialization after local hydration, with session/mutation warm-up in the background, so slow or offline networking does not hold the app's first frame.
+- Preserve queued startup delivery and avoid starting more work after disposal.
+
 # Changelog
+
+## 0.1.2
+
+- Add startup presentation readiness: initialize with `presentationPaused`, then call `resumePresentation()` after the loaded screen is ready.
+- Keep analytics and networking running while campaign UI is paused; `pausePresentation()` can protect later host flows without dismissing active UI.
+- Invalidate queued presentation work after consent revocation, reset, or identity changes, including requests prepared asynchronously.
 
 ## 0.1.0
 

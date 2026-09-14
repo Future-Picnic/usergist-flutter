@@ -11,9 +11,11 @@ import 'modal_coordinator.dart';
 
 /// Request emitted by the authenticated instruction inbox.
 class InAppShowRequest {
-  const InAppShowRequest({required this.message});
+  const InAppShowRequest({required this.message, this.isValid});
 
   final ArmedInAppMessage message;
+
+  final bool Function()? isValid;
 }
 
 enum _InAppOutcomeKind { dismissed, autoDismissed, cta }
@@ -128,7 +130,7 @@ class InAppPresenter {
           onCta(request.message.messageId, cta, index);
           await _openTarget(cta);
         }
-      });
+      }, isValid: request.isValid);
     } on Object catch (error, stack) {
       log.e('in-app presentation failed', error, stack);
     } finally {

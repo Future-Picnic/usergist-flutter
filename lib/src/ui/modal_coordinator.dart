@@ -1,14 +1,17 @@
 import 'dart:async';
+import '../internal/presentation_gate.dart';
 
 /// Serializes SDK-owned Navigator routes so prompts, surveys, and in-app
 /// messages never overlap or disappear while another SDK surface is active.
 class SdkModalCoordinator {
+  SdkModalCoordinator({PresentationGate? gate}) : gate = gate ?? PresentationGate();
+  final PresentationGate gate;
   final List<_ModalTask> _pending = <_ModalTask>[];
   bool _running = false;
 
-  Future<void> schedule(Future<void> Function() action) {
+  Future<void> schedule(Future<void> Function() action, {bool Function()? isValid}) {
     final completer = Completer<void>();
-    _pending.add(_ModalTask(action, completer));
+    _pending.add(_ModalTask(action, completer, isValid ?? () => true));
     unawaited(_drain());
     return completer.future;
   }
@@ -28,7 +31,10 @@ class SdkModalCoordinator {
     _running = true;
     final task = _pending.removeAt(0);
     try {
-      await task.action();
+      while (task.isValid() && gate.paused) {
+        await gate.waitUntilReady(task.isValid);
+      }
+      if (task.isValid()) await task.action();
       task.completer.complete();
     } on Object catch (error, stack) {
       task.completer.completeError(error, stack);
@@ -40,7 +46,9 @@ class SdkModalCoordinator {
 }
 
 class _ModalTask {
-  const _ModalTask(this.action, this.completer);
+  const _ModalTask(this.action, this.completer, this.isValid);
+
+  final bool Function() isValid;
 
   final Future<void> Function() action;
   final Completer<void> completer;
