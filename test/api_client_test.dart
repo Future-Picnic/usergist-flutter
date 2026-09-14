@@ -24,7 +24,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
     );
     client.setSubjectToken('st_test');
@@ -41,7 +41,7 @@ void main() {
     expect(sent.method, 'POST');
     expect(sent.url.toString(), 'https://api.test/v1/sdk/ingest');
     expect(sent.headers['authorization'], 'Bearer wk_abc');
-    expect(sent.headers['x-usergist-sdk-version'], 'flutter/0.1.2');
+    expect(sent.headers['x-usergist-sdk-version'], 'flutter/0.1.3');
     expect(sent.headers['x-usergist-platform'], 'flutter');
     expect(sent.headers['x-usergist-subject-token'], 'st_test');
   });
@@ -56,7 +56,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
     )..setSubjectToken('st_anonymous');
 
@@ -80,7 +80,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
       retryPolicy: RetryPolicy(
         baseDelayMs: 1,
@@ -104,7 +104,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
       retryPolicy: RetryPolicy(
         maxAttempts: 3,
@@ -130,7 +130,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
       retryPolicy: RetryPolicy(
         baseDelayMs: 1,
@@ -154,7 +154,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
       retryPolicy: RetryPolicy(
         baseDelayMs: 1,
@@ -183,7 +183,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_abc',
-      sdkVersion: '0.1.2',
+      sdkVersion: '0.1.3',
       httpClient: mock,
     );
     client.setSubjectToken('st_test');

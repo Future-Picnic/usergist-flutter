@@ -8,8 +8,12 @@ and React Native SDKs.
 
 ```yaml
 dependencies:
-  usergist_feedback: ^0.1.2
+  usergist_feedback: ^0.1.3
 ```
+
+Initialization finishes after local storage is hydrated. Session and mutation
+warm-up continue in the background, so offline networking does not delay
+`runApp`. Host rendering must not wait for consent/identity network confirmation.
 
 ## Startup presentation readiness
 

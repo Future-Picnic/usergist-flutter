@@ -56,10 +56,14 @@ class UserGistCore {
     required this.maxQueueSize,
     required this.triggerSyncInterval,
     this.onSurveyInvite,
+    ApiClient? apiClient,
     PresentationGate? presentationGate,
-  }) : presentationGate = presentationGate ?? PresentationGate();
+  })  : _providedApiClient = apiClient,
+        presentationGate = presentationGate ?? PresentationGate();
 
   final PresentationGate presentationGate;
+  final ApiClient? _providedApiClient;
+  bool _disposed = false;
 
   /// Write key for this app.
   final String writeKey;
@@ -228,22 +232,13 @@ class UserGistCore {
       rulesCache: _rulesCache,
       frequencyCapStore: _freqCaps,
     );
-    _api = ApiClient(
-      baseUrl: baseUrl,
-      writeKey: writeKey,
-      sdkVersion: sdkVersion,
-      retryPolicy: RetryPolicy(),
-    );
-    try {
-      await _ensureSubjectSession();
-      await _flushMutations();
-    } on Object catch (error, stack) {
-      log.e(
-        'subject session warmup failed; background retry scheduled',
-        error,
-        stack,
-      );
-    }
+    _api = _providedApiClient ??
+        ApiClient(
+          baseUrl: baseUrl,
+          writeKey: writeKey,
+          sdkVersion: sdkVersion,
+          retryPolicy: RetryPolicy(),
+        );
     _sessionId = _newSessionId();
 
     _runAsync(_collectContext(), 'device context collection');
@@ -271,13 +266,31 @@ class UserGistCore {
       triggerSyncInterval,
       (_) => _runAsync(_syncTriggers(), 'periodic trigger sync'),
     );
+    _runAsync(_startNetworkDelivery(), 'initial network delivery');
+
+    log.d('SDK started (baseUrl=$baseUrl, anonId=${identity.anonymousId})');
+  }
+
+  // Local hydration completes before init returns; network availability must
+  // never hold the host's first frame. Preserve session/mutation ordering.
+  Future<void> _startNetworkDelivery() async {
+    try {
+      await _ensureSubjectSession();
+      await _flushMutations();
+    } on Object catch (error, stack) {
+      if (_disposed) return;
+      log.e(
+        'subject session warmup failed; background retry scheduled',
+        error,
+        stack,
+      );
+    }
+    if (_disposed) return;
     _runAsync(
       _syncTriggers().whenComplete(_requestAppOpen),
       'initial trigger sync',
     );
     _runAsync(pollInstructions(), 'initial instruction poll');
-
-    log.d('SDK started (baseUrl=$baseUrl, anonId=${identity.anonymousId})');
   }
 
   /// Replaces the caller-side theme overrides.
@@ -847,9 +860,14 @@ class UserGistCore {
       }
       final result = await _api.getJson(
         SdkEndpoints.instructions,
-        query: <String, String>{'after': '$after', 'limit': '100',
-          'protocolVersion': '2', 'platform': Platform.isIOS ? 'ios' : 'android',
-          'anonymousId': identity.anonymousId, 'sdkVersion': sdkVersion},
+        query: <String, String>{
+          'after': '$after',
+          'limit': '100',
+          'protocolVersion': '2',
+          'platform': Platform.isIOS ? 'ios' : 'android',
+          'anonymousId': identity.anonymousId,
+          'sdkVersion': sdkVersion
+        },
       );
       if (!result.success) return;
       final raw = result.data?['instructions'];
@@ -892,14 +910,17 @@ class UserGistCore {
   }
 
   void _emitPrompt(PromptShowRequest request) => presentationGate.dispatch(
-    () => _showCtrl.add(request), request.isValid ?? () => true,
-  );
+        () => _showCtrl.add(request),
+        request.isValid ?? () => true,
+      );
   void _emitInApp(InAppShowRequest request) => presentationGate.dispatch(
-    () => _inAppCtrl.add(request), request.isValid ?? () => true,
-  );
+        () => _inAppCtrl.add(request),
+        request.isValid ?? () => true,
+      );
   void _emitSurvey(SurveyShowRequest request) => presentationGate.dispatch(
-    () => _surveyCtrl.add(request), request.isValid ?? () => true,
-  );
+        () => _surveyCtrl.add(request),
+        request.isValid ?? () => true,
+      );
 
   void _dispatchInstruction(String type, Map<String, Object?> payload) {
     if (type == 'prompt.show') {
@@ -917,7 +938,9 @@ class UserGistCore {
           return;
         }
         _emitPrompt(
-          PromptShowRequest(prompt: ClientPrompt.fromJson(prompt), isValid: presentationGate.validator('feedback')),
+          PromptShowRequest(
+              prompt: ClientPrompt.fromJson(prompt),
+              isValid: presentationGate.validator('feedback')),
         );
       } on Object catch (err, st) {
         log.e('invalid prompt.show instruction', err, st);
@@ -964,7 +987,8 @@ class UserGistCore {
             )) {
           return;
         }
-        _emitInApp(InAppShowRequest(message: message, isValid: presentationGate.validator('feedback')));
+        _emitInApp(InAppShowRequest(
+            message: message, isValid: presentationGate.validator('feedback')));
       } on Object catch (err, st) {
         log.e('invalid inapp.show instruction', err, st);
       }
@@ -1081,6 +1105,8 @@ class UserGistCore {
 
   /// Tears down timers, subscriptions, and HTTP resources.
   Future<void> dispose() async {
+    _disposed = true;
+    _resetGeneration++;
     _flushTimer?.cancel();
     _triggerTimer?.cancel();
     _lifecycle.detach();
@@ -1392,7 +1418,9 @@ class UserGistCore {
         _rememberLocalInstruction(
           _instructionKey('prompt.show', trigger.promptId, eventId),
         );
-        _emitPrompt(PromptShowRequest(prompt: trigger.prompt, isValid: presentationGate.validator('feedback')));
+        _emitPrompt(PromptShowRequest(
+            prompt: trigger.prompt,
+            isValid: presentationGate.validator('feedback')));
       }
     }
 
@@ -1438,7 +1466,8 @@ class UserGistCore {
         _rememberLocalInstruction(
           _instructionKey('inapp.show', message.messageId, eventId),
         );
-        _emitInApp(InAppShowRequest(message: message, isValid: presentationGate.validator('feedback')));
+        _emitInApp(InAppShowRequest(
+            message: message, isValid: presentationGate.validator('feedback')));
         break;
       }
     }

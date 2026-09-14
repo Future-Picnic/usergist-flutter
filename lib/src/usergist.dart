@@ -44,7 +44,7 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.1.2';
+  static const String sdkVersion = '0.1.3';
 
   static UserGistCore? _core;
   static bool _initializing = false;

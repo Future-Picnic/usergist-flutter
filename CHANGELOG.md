@@ -1,3 +1,8 @@
+## 0.1.3
+
+- Complete initialization after local hydration, with session/mutation warm-up in the background, so slow or offline networking does not hold the app's first frame.
+- Preserve queued startup delivery and avoid starting more work after disposal.
+
 # Changelog
 
 ## 0.1.2
