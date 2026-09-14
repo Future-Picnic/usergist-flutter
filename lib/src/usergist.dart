@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'internal/core.dart';
+import 'internal/presentation_gate.dart';
 import 'internal/logger.dart';
 import 'internal/requests/requests_api.dart';
 import 'internal/transport/endpoints.dart';
@@ -43,9 +44,17 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.1.0';
+  static const String sdkVersion = '0.1.2';
 
   static UserGistCore? _core;
+  static bool _initializing = false;
+  static final PresentationGate internalPresentationGate = PresentationGate();
+
+  /// Pause campaign UI without stopping analytics or closing an active route.
+  static void pausePresentation() => internalPresentationGate.setPaused(true);
+
+  /// Call after the loaded screen and startup navigation have completed.
+  static void resumePresentation() => internalPresentationGate.setPaused(false);
 
   /// Initializes the SDK. Safe to call multiple times — subsequent calls
   /// are ignored (the first configuration wins).
@@ -54,19 +63,20 @@ class UserGist {
     UserGistEnvironment environment = UserGistEnvironment.production,
     String? apiUrl,
     bool debug = false,
+    bool presentationPaused = false,
     Duration flushInterval = const Duration(seconds: 15),
     int flushBatchSize = 100,
     int maxQueueSize = 1000,
     Duration triggerSyncInterval = const Duration(minutes: 5),
   }) async {
+    if (_core != null || _initializing) return;
+    _initializing = true;
     try {
-      if (_core != null) {
-        log.w('UserGist.init called more than once — ignoring');
-        return;
-      }
+      internalPresentationGate.setPaused(presentationPaused);
       log.setDebug(debug);
       late final UserGistCore core;
       core = UserGistCore(
+        presentationGate: internalPresentationGate,
         writeKey: writeKey,
         baseUrl: apiUrl ?? environment.defaultUrl,
         sdkVersion: sdkVersion,
@@ -98,7 +108,10 @@ class UserGist {
       await core.start();
       _core = core;
     } on Object catch (err, st) {
+      internalPresentationGate.invalidate();
       log.e('UserGist.init failed', err, st);
+    } finally {
+      _initializing = false;
     }
   }
 

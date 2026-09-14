@@ -13,6 +13,7 @@ import 'theme_resolver.dart';
 
 class SurveyShowRequest {
   const SurveyShowRequest({
+    this.isValid,
     required this.survey,
     required this.attempt,
     required this.source,
@@ -21,6 +22,8 @@ class SurveyShowRequest {
   final SurveyCampaignWithFlow survey;
   final SurveyAttemptSession attempt;
   final String source;
+
+  final bool Function()? isValid;
 }
 
 /// Owns the host Navigator context and serializes native survey routes.
@@ -128,7 +131,7 @@ class SurveyPresenter {
           ),
         );
         _routeActive = false;
-      });
+      }, isValid: request.isValid);
     } on Object catch (error, stack) {
       onPresentationFailed(request.survey.id);
       log.e('survey presentation failed', error, stack);

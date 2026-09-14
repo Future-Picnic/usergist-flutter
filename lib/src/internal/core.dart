@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'presentation_gate.dart';
 import 'dart:convert';
 import 'dart:io' show File, Platform;
 
@@ -55,7 +56,10 @@ class UserGistCore {
     required this.maxQueueSize,
     required this.triggerSyncInterval,
     this.onSurveyInvite,
-  });
+    PresentationGate? presentationGate,
+  }) : presentationGate = presentationGate ?? PresentationGate();
+
+  final PresentationGate presentationGate;
 
   /// Write key for this app.
   final String writeKey;
@@ -343,6 +347,8 @@ class UserGistCore {
 
   /// Sets consent and flushes if feedback consent was newly granted.
   Future<void> setConsent(Consent purposes) async {
+    if (purposes.feedback == false) presentationGate.invalidate('feedback');
+    if (purposes.survey == false) presentationGate.invalidate('survey');
     final previous = _consent.current;
     await _consent.set(purposes);
     final current = _consent.current;
@@ -535,6 +541,7 @@ class UserGistCore {
     String source = 'on_demand',
   }) async {
     if (!_consent.current.allowsSurvey || surveyId.isEmpty) return;
+    final valid = presentationGate.validator('survey');
     final cachedSurvey = _campaignRules.survey(surveyId)?.survey;
     SurveyCampaignWithFlow survey;
     if (cachedSurvey != null) {
@@ -587,11 +594,12 @@ class UserGistCore {
       throw const FormatException('survey attempt id is missing');
     }
     await _surveyStore.upsert(surveyId, attempt);
-    _surveyCtrl.add(
+    _emitSurvey(
       SurveyShowRequest(
         survey: survey,
         attempt: attempt,
         source: acceptedSource,
+        isValid: valid,
       ),
     );
   }
@@ -668,6 +676,7 @@ class UserGistCore {
     if (_resetInProgress) return;
     _resetInProgress = true;
     _resetGeneration += 1;
+    presentationGate.invalidate();
     _resetCtrl.add(null);
     try {
       final session = _sessionFuture;
@@ -882,6 +891,16 @@ class UserGistCore {
     }
   }
 
+  void _emitPrompt(PromptShowRequest request) => presentationGate.dispatch(
+    () => _showCtrl.add(request), request.isValid ?? () => true,
+  );
+  void _emitInApp(InAppShowRequest request) => presentationGate.dispatch(
+    () => _inAppCtrl.add(request), request.isValid ?? () => true,
+  );
+  void _emitSurvey(SurveyShowRequest request) => presentationGate.dispatch(
+    () => _surveyCtrl.add(request), request.isValid ?? () => true,
+  );
+
   void _dispatchInstruction(String type, Map<String, Object?> payload) {
     if (type == 'prompt.show') {
       if (!_consent.isFeedbackGranted) return;
@@ -897,8 +916,8 @@ class UserGistCore {
             )) {
           return;
         }
-        _showCtrl.add(
-          PromptShowRequest(prompt: ClientPrompt.fromJson(prompt)),
+        _emitPrompt(
+          PromptShowRequest(prompt: ClientPrompt.fromJson(prompt), isValid: presentationGate.validator('feedback')),
         );
       } on Object catch (err, st) {
         log.e('invalid prompt.show instruction', err, st);
@@ -945,7 +964,7 @@ class UserGistCore {
             )) {
           return;
         }
-        _inAppCtrl.add(InAppShowRequest(message: message));
+        _emitInApp(InAppShowRequest(message: message, isValid: presentationGate.validator('feedback')));
       } on Object catch (err, st) {
         log.e('invalid inapp.show instruction', err, st);
       }
@@ -1197,6 +1216,7 @@ class UserGistCore {
           }
           _subjectToken = token;
           _api.setSubjectToken(token);
+          if (identity.externalId != externalId) presentationGate.invalidate();
           await identity.setExternalId(externalId);
           final properties = mutation.payload['properties'];
           if (properties is Map<String, Object?> && properties.isNotEmpty) {
@@ -1372,7 +1392,7 @@ class UserGistCore {
         _rememberLocalInstruction(
           _instructionKey('prompt.show', trigger.promptId, eventId),
         );
-        _showCtrl.add(PromptShowRequest(prompt: trigger.prompt));
+        _emitPrompt(PromptShowRequest(prompt: trigger.prompt, isValid: presentationGate.validator('feedback')));
       }
     }
 
@@ -1418,7 +1438,7 @@ class UserGistCore {
         _rememberLocalInstruction(
           _instructionKey('inapp.show', message.messageId, eventId),
         );
-        _inAppCtrl.add(InAppShowRequest(message: message));
+        _emitInApp(InAppShowRequest(message: message, isValid: presentationGate.validator('feedback')));
         break;
       }
     }
