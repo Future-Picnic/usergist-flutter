@@ -37,6 +37,26 @@ FeatureRequest mkRequest({
 
 void main() {
   group('RequestsCache', () {
+    test('reset discards viewer state and late rollbacks', () {
+      final cache = RequestsCache();
+      cache.upsert(mkRequest(viewerHasUpvoted: true, viewerIsFollowing: true));
+      final voteRollback = cache.applyOptimisticVote('r1', false);
+      final followRollback = cache.applyOptimisticFollow('r1', false);
+      var oldListenerCalled = false;
+      cache.subscribe((_, __) {
+        oldListenerCalled = true;
+      });
+      cache.clear();
+      expect(cache.get('r1'), isNull);
+      cache.upsert(mkRequest(upvoteCount: 25));
+      voteRollback();
+      followRollback();
+      expect(cache.get('r1')!.upvoteCount, 25);
+      expect(cache.get('r1')!.viewerHasUpvoted, false);
+      expect(cache.get('r1')!.viewerIsFollowing, false);
+      expect(oldListenerCalled, false);
+    });
+
     test('optimistic upvote bumps counts and auto-follows', () {
       final cache = RequestsCache();
       cache.upsert(mkRequest());

@@ -26,7 +26,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'https://api.test',
       writeKey: 'wk_test',
-      sdkVersion: '0.1.3',
+      sdkVersion: '0.1.4',
       httpClient: mock,
     )..setSubjectToken('st_test');
     final api = RequestsApi(client);

@@ -1,3 +1,4 @@
+import 'models/identity_state.dart';
 import 'dart:async';
 
 import 'internal/core.dart';
@@ -44,10 +45,63 @@ class UserGist {
   UserGist._();
 
   /// Current SDK version (kept in sync with pubspec).
-  static const String sdkVersion = '0.1.3';
+  static const String sdkVersion = '0.1.4';
 
   static UserGistCore? _core;
-  static bool _initializing = false;
+  static void Function(PushSubscriptionState)? _pushSubscriptionHandler;
+  static void setPushSubscriptionStateHandler(
+      void Function(PushSubscriptionState)? handler) {
+    _pushSubscriptionHandler = handler;
+    _core?.onPushSubscriptionState = handler;
+    _core?.notifyPushSubscription();
+  }
+
+  static SubjectTokenProvider? _subjectTokenProvider;
+  static void Function(IdentityState)? _identityStateHandler;
+  static IdentityState get identityState =>
+      _core?.identityState ??
+      const IdentityState(status: 'anonymous', anonymousId: '');
+  static void setSubjectTokenProvider(SubjectTokenProvider? provider) {
+    _subjectTokenProvider = provider;
+    _core?.subjectTokenProvider = provider;
+  }
+
+  static void setIdentityStateHandler(void Function(IdentityState)? handler) {
+    _identityStateHandler = handler;
+    _core?.onIdentityState = handler;
+    try {
+      handler?.call(identityState);
+    } on Object catch (error, stack) {
+      log.e("identity observer failed", error, stack);
+    }
+  }
+
+  static Future<IdentifyResult> identifyAsync(String userId,
+      {Map<String, Object?>? properties, required String subjectToken}) async {
+    try {
+      return await _core?.identify(userId, properties, subjectToken) ??
+          IdentifyResult.rejected;
+    } on Object catch (error, stack) {
+      log.e('identify failed', error, stack);
+      return IdentifyResult.rejected;
+    }
+  }
+
+  static Future<IdentifyResult> setUserProperties(
+      Map<String, Object?> properties,
+      {List<String> unset = const <String>[]}) async {
+    try {
+      return await _core?.setUserProperties(properties, unset) ??
+          IdentifyResult.rejected;
+    } on Object catch (error, stack) {
+      log.e('setUserProperties failed', error, stack);
+      return IdentifyResult.rejected;
+    }
+  }
+
+  static Completer<void>? _initializing;
+  static Future<bool>? _resetWork;
+  static bool _resetPending = false;
   static final PresentationGate internalPresentationGate = PresentationGate();
 
   /// Pause campaign UI without stopping analytics or closing an active route.
@@ -69,8 +123,11 @@ class UserGist {
     int maxQueueSize = 1000,
     Duration triggerSyncInterval = const Duration(minutes: 5),
   }) async {
-    if (_core != null || _initializing) return;
-    _initializing = true;
+    if (_core != null) return;
+    final pending = _initializing;
+    if (pending != null) return pending.future;
+    final initialized = Completer<void>();
+    _initializing = initialized;
     try {
       internalPresentationGate.setPaused(presentationPaused);
       log.setDebug(debug);
@@ -105,13 +162,18 @@ class UserGist {
           }
         },
       );
-      await core.start();
+      core.onPushSubscriptionState = _pushSubscriptionHandler;
+      core.subjectTokenProvider = _subjectTokenProvider;
+      core.onIdentityState = _identityStateHandler;
+      await core.start(deferNetworkDelivery: true);
       _core = core;
+      if (!_resetPending) core.startNetworkDelivery();
     } on Object catch (err, st) {
       internalPresentationGate.invalidate();
       log.e('UserGist.init failed', err, st);
     } finally {
-      _initializing = false;
+      _initializing = null;
+      initialized.complete();
     }
   }
 
@@ -249,15 +311,31 @@ class UserGist {
     }
   }
 
+  /// False leaves SDK work paused; fix secure storage and retry before login.
+  static Future<bool> resetAsync() =>
+      _resetWork ??= _performReset().whenComplete(() {
+        _resetWork = null;
+      });
+
+  static Future<bool> _performReset() async {
+    _resetPending = true;
+    final initializing = _initializing;
+    try {
+      await initializing?.future;
+      // Failed initialization cannot certify that stored identity was cleared.
+      if (initializing != null && _core == null) return false;
+      await _core?.reset();
+      _resetPending = false;
+      return true;
+    } on Object catch (error, stack) {
+      log.e('reset failed', error, stack);
+      return false;
+    }
+  }
+
   /// Clears identity and local state (queue + caches + consent).
   static Future<void> reset() async {
-    try {
-      final core = _core;
-      if (core == null) return;
-      await core.reset();
-    } on Object catch (err, st) {
-      log.e('reset failed', err, st);
-    }
+    await resetAsync();
   }
 
   /// Replaces the caller-side theme overrides.

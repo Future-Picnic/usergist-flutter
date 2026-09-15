@@ -13,6 +13,8 @@
 // falling back to plaintext shared preferences; non-secret compatibility
 // state can still use the legacy store when secure storage is unavailable.
 
+import 'dart:async';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'hashing.dart';
@@ -34,11 +36,19 @@ class SecureKeyValueStore implements KeyValueStore {
   final String _prefix;
   final KeyValueStore _legacy;
   final FlutterSecureStorage _backend;
+  Future<void> _serial = Future<void>.value();
+  Future<T> _ordered<T>(Future<T> Function() operation) {
+    final task = _serial.then((_) => operation());
+    _serial = task.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return task;
+  }
 
   String _k(String key) => '$_prefix$key';
 
   @override
-  Future<String?> readString(String key) async {
+  Future<String?> readString(String key) => _ordered(() => _readString(key));
+
+  Future<String?> _readString(String key) async {
     try {
       final secureValue = await _backend.read(key: _k(key));
       if (secureValue != null) {
@@ -67,12 +77,16 @@ class SecureKeyValueStore implements KeyValueStore {
 
   @override
   Future<void> writeString(String key, String value) async {
-    await writeStringStrict(key, value);
+    if (!await writeStringStrict(key, value))
+      throw StateError("Unable to persist SDK state");
   }
 
   /// Persists state and reports whether the appropriate backing store accepted
   /// it. Credential keys never fall back to plaintext storage.
-  Future<bool> writeStringStrict(String key, String value) async {
+  Future<bool> writeStringStrict(String key, String value) =>
+      _ordered(() => _writeStringStrict(key, value));
+
+  Future<bool> _writeStringStrict(String key, String value) async {
     try {
       await _backend.write(key: _k(key), value: value);
       return true;
@@ -92,14 +106,21 @@ class SecureKeyValueStore implements KeyValueStore {
   }
 
   bool _requiresSecureStorage(String key) =>
-      key == 'session.subjectToken' || key == 'mutations.queue';
+      key.startsWith('identity.') ||
+      key == 'session.subjectToken' ||
+      key == 'mutations.queue' ||
+      key == 'session.revocations' ||
+      key == 'push.registration';
 
   @override
-  Future<void> remove(String key) async {
+  Future<void> remove(String key) => _ordered(() => _remove(key));
+
+  Future<void> _remove(String key) async {
     try {
       await _backend.delete(key: _k(key));
     } on Object catch (err, st) {
       log.e('secure remove failed', err, st);
+      rethrow;
     }
     // Also clear any legacy copy left behind from a prior install.
     await _legacy.remove(key);

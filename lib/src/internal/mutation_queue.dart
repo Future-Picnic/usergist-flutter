@@ -3,9 +3,15 @@ import 'dart:convert';
 import 'secure_store.dart';
 import 'uid.dart';
 
-enum MutationKind { identify, feedbackResponse, surveyComplete, surveyAbandon }
+enum MutationKind {
+  identify,
+  userProperties,
+  feedbackResponse,
+  surveyComplete,
+  surveyAbandon
+}
 
-enum MutationPurpose { essential, feedback, survey }
+enum MutationPurpose { essential, analytics, feedback, survey }
 
 class PendingMutation {
   const PendingMutation({
@@ -94,22 +100,33 @@ class MutationQueue {
   }) async {
     var id = newUuid();
     await _mutate(() {
-      if (dedupeKey != null) {
-        final existing = _items.where((item) => item.dedupeKey == dedupeKey);
-        if (existing.isNotEmpty) {
-          id = existing.first.id;
-          return;
-        }
+      final matches = _items
+          .where((item) => dedupeKey != null && item.dedupeKey == dedupeKey);
+      final existing = matches.isEmpty ? null : matches.first;
+      if (existing != null && kind != MutationKind.identify) {
+        id = existing.id;
+        return;
       }
       final next = PendingMutation(
         id: id,
         kind: kind,
         purpose: purpose,
-        payload: payload,
+        payload: existing == null
+            ? payload
+            : <String, Object?>{
+                ...payload,
+                'properties': <String, Object?>{
+                  ...?existing.payload['properties'] as Map<String, Object?>?,
+                  ...?payload['properties'] as Map<String, Object?>?,
+                },
+              },
         createdAt: DateTime.now().toUtc().toIso8601String(),
         dedupeKey: dedupeKey,
       );
-      if (purpose == MutationPurpose.essential) {
+      if (existing != null) {
+        _items =
+            _items.map((item) => item.id == existing.id ? next : item).toList();
+      } else if (purpose == MutationPurpose.essential) {
         _items.insert(0, next);
       } else {
         _items.add(next);

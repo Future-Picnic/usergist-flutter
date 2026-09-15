@@ -38,12 +38,12 @@ class IdentityStore {
 
   /// Sets the external identifier (called by [UserGist.identify]).
   Future<void> setExternalId(String? id) async {
-    _externalId = id;
     if (id == null) {
       await _store.remove(_extKey);
     } else {
       await _store.writeString(_extKey, id);
     }
+    _externalId = id;
   }
 
   /// Persists the latest external user properties. Stored as a JSON blob.
@@ -60,7 +60,7 @@ class IdentityStore {
     await _store.remove(_extKey);
     await _store.remove(_propsKey);
     final fresh = newAnonymousId();
-    _anonymousId = fresh;
     await _store.writeString(_anonKey, fresh);
+    _anonymousId = fresh;
   }
 }

@@ -1,5 +1,8 @@
 # usergist_feedback
 
+For account IDs, backend-verified guests, token expiry, property updates, and logout, see [the identity integration guide](https://usergist.com/docs/integrations/identity). The identity lifecycle APIs require SDK **0.1.4** and the coordinated backend update; verify the installed version before copying examples into an older app.
+
+
 Flutter SDK for [userGist](https://usergist.com). It implements
 the same authenticated protocol and durable-delivery guarantees as the native
 and React Native SDKs.
@@ -8,7 +11,7 @@ and React Native SDKs.
 
 ```yaml
 dependencies:
-  usergist_feedback: ^0.1.3
+  usergist_feedback: ^0.1.4
 ```
 
 Initialization finishes after local storage is hydrated. Session and mutation

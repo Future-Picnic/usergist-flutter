@@ -30,19 +30,25 @@ Object? toJsonScalar(Object? value) {
 
 /// Mirrors the React Native event-property contract: at most 100 non-PII
 /// keys, scalar values only, bounded keys/strings, and finite numbers.
-Map<String, Object?> sanitizeProperties(Map<String, Object?>? input) {
+Map<String, Object?> sanitizeProperties(Map<String, Object?>? input,
+    {bool allowPii = false}) {
   if (input == null || input.isEmpty) return const <String, Object?>{};
   final out = <String, Object?>{};
   final piiKey =
       RegExp(r'(?:^|[._])(email|phone|ssn|tax_id)$', caseSensitive: false);
-  for (final entry in input.entries.take(100)) {
+  for (final entry in input.entries.take(allowPii ? 64 : 100)) {
     final key = entry.key;
-    if (key.isEmpty || key.length > 120 || piiKey.hasMatch(key)) continue;
+    if (key.isEmpty ||
+        key.length > 120 ||
+        const <String>["__proto__", "prototype", "constructor"].contains(key) ||
+        (!allowPii && piiKey.hasMatch(key))) continue;
     final value = entry.value;
     if (value == null || value is bool) {
       out[key] = value;
     } else if (value is String) {
-      out[key] = value.length <= 10000 ? value : value.substring(0, 10000);
+      out[key] = value.length <= (allowPii ? 8192 : 10000)
+          ? value
+          : value.substring(0, allowPii ? 8192 : 10000);
     } else if (value is num && value.isFinite) {
       out[key] = value;
     }

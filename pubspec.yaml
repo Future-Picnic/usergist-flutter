@@ -1,6 +1,6 @@
 name: usergist_feedback
 description: userGist mobile feedback SDK for Flutter. Lightweight, GDPR-aware, offline-first event ingest and native prompt rendering.
-version: 0.1.3
+version: 0.1.4
 homepage: https://usergist.com
 repository: https://github.com/Future-Picnic/usergist-flutter
 issue_tracker: https://github.com/Future-Picnic/usergist-flutter/issues

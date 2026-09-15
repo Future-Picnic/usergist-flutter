@@ -53,6 +53,13 @@ class ApiClient {
   final http.Client _http;
   final RetryPolicy _retry;
   String? _subjectToken;
+  void Function()? onAuthenticationRequired;
+  String? _invalidatedToken;
+  DateTime _invalidatedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _generation = 0;
+  void cancelAll() {
+    _generation += 1;
+  }
 
   /// Installs the server-minted subject credential used by every SDK route
   /// except `/v1/sdk/session`.
@@ -157,6 +164,7 @@ class ApiClient {
     bool idempotent = true,
     String? subjectTokenOverride,
   }) async {
+    final generation = _generation;
     final requestSubjectToken = subjectTokenOverride ?? _subjectToken;
     if (requiresSubject && requestSubjectToken == null) {
       return const ApiResult<Map<String, Object?>>(
@@ -167,10 +175,12 @@ class ApiClient {
     Object? lastError;
     int? lastStatus;
     for (var attempt = 1; attempt <= _retry.maxAttempts; attempt++) {
+      if (generation != _generation)
+        return const ApiResult(success: false, error: 'session-changed');
       try {
         final uri = _uri(path, query);
         final req = http.Request(method, uri);
-        req.headers.addAll(_headers(subjectTokenOverride));
+        req.headers.addAll(_headers(requestSubjectToken));
         if (body != null) {
           req.body = safeEncode(body);
         }
@@ -178,7 +188,18 @@ class ApiClient {
               const Duration(seconds: 15),
             );
         final res = await http.Response.fromStream(streamed);
+        if (generation != _generation)
+          return const ApiResult(success: false, error: 'session-changed');
         lastStatus = res.statusCode;
+        if (res.statusCode == 401 &&
+            requestSubjectToken != null &&
+            requestSubjectToken == _subjectToken &&
+            (requestSubjectToken != _invalidatedToken ||
+                DateTime.now().difference(_invalidatedAt).inSeconds >= 5)) {
+          _invalidatedToken = requestSubjectToken;
+          _invalidatedAt = DateTime.now();
+          onAuthenticationRequired?.call();
+        }
         if (res.statusCode >= 200 && res.statusCode < 300) {
           if (res.bodyBytes.isEmpty) {
             return ApiResult<Map<String, Object?>>(

@@ -24,6 +24,13 @@ class RequestsCache {
   final Map<int, RequestsCacheListener> _listeners =
       <int, RequestsCacheListener>{};
   int _listenerSeq = 0;
+  int _generation = 0;
+
+  void clear() {
+    _generation++;
+    _store.clear();
+    _listeners.clear();
+  }
 
   void upsert(FeatureRequest req) {
     _store[req.id] = req;
@@ -43,6 +50,7 @@ class RequestsCache {
   Rollback applyOptimisticVote(String id, bool vote) {
     final before = _store[id];
     if (before == null) return () {};
+    final generation = _generation;
     var upvoteDelta = 0;
     if (vote && !before.viewerHasUpvoted) {
       upvoteDelta = 1;
@@ -60,6 +68,7 @@ class RequestsCache {
     _store[id] = next;
     _emit(id, next);
     return () {
+      if (generation != _generation) return;
       _store[id] = before;
       _emit(id, before);
     };
@@ -70,6 +79,7 @@ class RequestsCache {
   Rollback applyOptimisticFollow(String id, bool follow) {
     final before = _store[id];
     if (before == null) return () {};
+    final generation = _generation;
     var delta = 0;
     if (follow && !before.viewerIsFollowing) {
       delta = 1;
@@ -83,6 +93,7 @@ class RequestsCache {
     _store[id] = next;
     _emit(id, next);
     return () {
+      if (generation != _generation) return;
       _store[id] = before;
       _emit(id, before);
     };

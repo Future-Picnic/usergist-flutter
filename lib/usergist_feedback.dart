@@ -50,3 +50,10 @@ export 'src/models/request.dart'
         GetRequestsResult,
         RequestStatusChangedNotice,
         RequestsHandlers;
+
+export 'src/models/identity_state.dart'
+    show
+        IdentityState,
+        IdentifyResult,
+        SubjectTokenProvider,
+        PushSubscriptionState;

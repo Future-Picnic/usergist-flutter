@@ -1,3 +1,5 @@
+import 'session_revocations.dart';
+import '../models/identity_state.dart';
 import 'dart:async';
 import 'presentation_gate.dart';
 import 'dart:convert';
@@ -64,6 +66,102 @@ class UserGistCore {
   final PresentationGate presentationGate;
   final ApiClient? _providedApiClient;
   bool _disposed = false;
+  Map<String, Object?>? _pushRegistration;
+  String? _pushRegistrationKey;
+  String? _pushRegistrationAttempt;
+  Future<void> _pushWork = Future<void>.value();
+  Future<void> _serializePush(Future<void> Function() operation) {
+    final generation = _resetGeneration;
+    final task = _pushWork.then((_) async {
+      if (_disposed || _resetInProgress || generation != _resetGeneration)
+        return;
+      await operation();
+    });
+    _pushWork = task.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return task;
+  }
+
+  DateTime _pushRegisteredAt = DateTime.fromMillisecondsSinceEpoch(0);
+  void Function(PushSubscriptionState)? onPushSubscriptionState;
+  String _pushOwnerKey(String token) =>
+      '${identity.anonymousId}:${identity.externalId ?? ''}:$token';
+  void notifyPushSubscription() {
+    final token = _pushRegistration?['token'] as String?;
+    final optedIn = _consent.isPushGranted && !_resetInProgress;
+    try {
+      onPushSubscriptionState?.call(PushSubscriptionState(
+          tokenAvailable: token != null,
+          registered: optedIn &&
+              token != null &&
+              _pushRegistrationKey == _pushOwnerKey(token),
+          optedIn: optedIn,
+          anonymousId: identity.anonymousId,
+          externalId: identity.externalId));
+    } on Object catch (error, stack) {
+      log.e('push observer failed', error, stack);
+    }
+  }
+
+  Future<void> _retryPushRegistration() => _serializePush(() async {
+        final registration = _pushRegistration;
+        if (registration == null) {
+          notifyPushSubscription();
+          return;
+        }
+        await _registerPushToken(
+            registration['token']! as String,
+            registration['platform']! as String,
+            registration['environment']! as String);
+      });
+
+  SubjectTokenProvider? subjectTokenProvider;
+  void Function(IdentityState)? onIdentityState;
+  String _identityStatus = 'anonymous';
+  late final SessionRevocations _revocations;
+  Future<void>? _resetFuture;
+  String? _pendingResetToken;
+  String? _pendingResetAlias;
+  Future<bool>? _identityRecovery;
+  DateTime _lastRecovery = DateTime.fromMillisecondsSinceEpoch(0);
+  IdentityState get identityState => IdentityState(
+      status: _identityStatus,
+      anonymousId: identity.anonymousId,
+      externalId: identity.externalId);
+  void _notifyIdentity(String status) {
+    _identityStatus = status;
+    try {
+      onIdentityState?.call(identityState);
+    } on Object catch (error, stack) {
+      log.e('identity observer failed', error, stack);
+    }
+  }
+
+  Future<bool> _recoverIdentity() {
+    if (_resetInProgress) return Future<bool>.value(false);
+    _notifyIdentity('authentication-required');
+    return _identityRecovery ??= _performIdentityRecovery().whenComplete(() {
+      _identityRecovery = null;
+    });
+  }
+
+  Future<bool> _performIdentityRecovery() async {
+    final userId = identity.externalId, provider = subjectTokenProvider;
+    if (userId == null ||
+        provider == null ||
+        DateTime.now().difference(_lastRecovery).inSeconds < 5) return false;
+    _lastRecovery = DateTime.now();
+    final generation = _resetGeneration;
+    try {
+      final token = await provider(userId).timeout(const Duration(seconds: 30));
+      if (_resetInProgress ||
+          generation != _resetGeneration ||
+          identity.externalId != userId) return false;
+      return await identify(userId, null, token) == IdentifyResult.synced;
+    } on Object catch (error, stack) {
+      log.e('subject token refresh failed', error, stack);
+      return false;
+    }
+  }
 
   /// Write key for this app.
   final String writeKey;
@@ -185,7 +283,7 @@ class UserGistCore {
   Consent get consent => _consent.current;
 
   /// Boots the core: hydrates state, boots timers, collects context.
-  Future<void> start() async {
+  Future<void> start({bool deferNetworkDelivery = false}) async {
     if (_started) return;
     _started = true;
     _kv = SharedPrefsStore(writeKey: writeKey);
@@ -239,6 +337,20 @@ class UserGistCore {
           sdkVersion: sdkVersion,
           retryPolicy: RetryPolicy(),
         );
+    final savedPush = await _secureStore.readString('push.registration');
+    if (savedPush != null)
+      _pushRegistration =
+          Map<String, Object?>.from(jsonDecode(savedPush) as Map);
+    _revocations = SessionRevocations(_secureStore, _api);
+    _runAsync(_revocations.drain(), 'logout cleanup');
+    _api.onAuthenticationRequired = () {
+      _runAsync(
+          _recoverIdentity().then((ready) async {
+            if (ready) await flush();
+          }),
+          'identity refresh');
+    };
+    _notifyIdentity(identity.externalId == null ? 'anonymous' : 'identifying');
     _sessionId = _newSessionId();
 
     _runAsync(_collectContext(), 'device context collection');
@@ -256,19 +368,31 @@ class UserGistCore {
         _runAsync(flush(), 'background flush');
       },
     );
-    _lifecycle.attach();
-
-    _flushTimer = Timer.periodic(
-      flushInterval,
-      (_) => _runAsync(flush(), 'periodic flush'),
-    );
-    _triggerTimer = Timer.periodic(
-      triggerSyncInterval,
-      (_) => _runAsync(_syncTriggers(), 'periodic trigger sync'),
-    );
-    _runAsync(_startNetworkDelivery(), 'initial network delivery');
+    if (!deferNetworkDelivery) startNetworkDelivery();
 
     log.d('SDK started (baseUrl=$baseUrl, anonId=${identity.anonymousId})');
+  }
+
+  bool _deliveryStarted = false;
+
+  /// Hydration can finish while a host logout is waiting. Start delivery only
+  /// after that identity boundary has been resolved by the public entrypoint.
+  void startNetworkDelivery() {
+    if (_disposed || _resetInProgress) return;
+    if (!_deliveryStarted) {
+      _deliveryStarted = true;
+      _lifecycle.attach();
+
+      _flushTimer = Timer.periodic(
+        flushInterval,
+        (_) => _runAsync(flush(), 'periodic flush'),
+      );
+      _triggerTimer = Timer.periodic(
+        triggerSyncInterval,
+        (_) => _runAsync(_syncTriggers(), 'periodic trigger sync'),
+      );
+    }
+    _runAsync(_startNetworkDelivery(), 'initial network delivery');
   }
 
   // Local hydration completes before init returns; network availability must
@@ -299,18 +423,27 @@ class UserGistCore {
   }
 
   /// Identifies the user.
-  Future<void> identify(
+  Future<IdentifyResult> identify(
     String userId,
     Map<String, Object?>? properties,
     String subjectToken,
   ) async {
+    if (_resetInProgress) return IdentifyResult.rejected;
+    final pending = _mutations.first;
+    final pendingId = pending?.kind == MutationKind.identify
+        ? pending?.payload['externalId']
+        : null;
+    if ((identity.externalId != null && identity.externalId != userId) ||
+        (pendingId != null && pendingId != userId))
+      return IdentifyResult.rejected;
+    final generation = _resetGeneration;
     if (userId.isEmpty) {
       throw ArgumentError('identify requires a non-empty userId');
     }
     if (!subjectToken.startsWith('st_')) {
       throw ArgumentError('identify requires a server-minted subject token');
     }
-    final clean = sanitizeProperties(properties);
+    final clean = sanitizeProperties(properties, allowPii: true);
     final mutationId = await _mutations.enqueue(
       MutationKind.identify,
       MutationPurpose.essential,
@@ -323,10 +456,44 @@ class UserGistCore {
       },
       dedupeKey: 'identify:$userId',
     );
-    await _flushMutations();
-    if (_mutations.contains(mutationId)) {
-      throw StateError('identify is stored locally and pending retry');
+    _notifyIdentity('identifying');
+    if (_subjectToken == null && identity.externalId == null) {
+      try {
+        await _ensureSubjectSession();
+      } on Object {
+        return IdentifyResult.queued;
+      }
     }
+    final rejected = await _flushMutations();
+    if (_resetInProgress ||
+        generation != _resetGeneration ||
+        rejected.contains(mutationId)) return IdentifyResult.rejected;
+    return _mutations.contains(mutationId)
+        ? IdentifyResult.queued
+        : IdentifyResult.synced;
+  }
+
+  Future<IdentifyResult> setUserProperties(
+      Map<String, Object?> properties, List<String> unset) async {
+    if (_resetInProgress ||
+        !_consent.isAnalyticsGranted ||
+        (properties.isEmpty && unset.isEmpty) ||
+        unset.any(properties.containsKey)) return IdentifyResult.rejected;
+    final generation = _resetGeneration;
+    final id = await _mutations.enqueue(MutationKind.userProperties,
+        MutationPurpose.analytics, <String, Object?>{
+      'anonymousId': identity.anonymousId,
+      'mutationId': newUuid(),
+      'set': sanitizeProperties(properties, allowPii: true),
+      'unset': unset,
+    });
+    final rejected = await _flushMutations();
+    if (_resetInProgress ||
+        generation != _resetGeneration ||
+        rejected.contains(id)) return IdentifyResult.rejected;
+    return _mutations.contains(id)
+        ? IdentifyResult.queued
+        : IdentifyResult.synced;
   }
 
   /// Tracks an event.
@@ -335,6 +502,7 @@ class UserGistCore {
     Map<String, Object?>? properties, {
     EventPurpose purpose = EventPurpose.analytics,
   }) {
+    if (_resetInProgress) return;
     if (name.isEmpty) {
       throw ArgumentError('track requires a non-empty event name');
     }
@@ -360,6 +528,7 @@ class UserGistCore {
 
   /// Sets consent and flushes if feedback consent was newly granted.
   Future<void> setConsent(Consent purposes) async {
+    if (_resetInProgress) return;
     if (purposes.feedback == false) presentationGate.invalidate('feedback');
     if (purposes.survey == false) presentationGate.invalidate('survey');
     final previous = _consent.current;
@@ -372,8 +541,10 @@ class UserGistCore {
       'version': _consent.version,
       'effectiveAt': _consent.updatedAt.toIso8601String(),
     });
+    _runAsync(_retryPushRegistration(), 'push registration');
     if (purposes.analytics == false) {
       await _queue.removePurpose(EventPurpose.analytics);
+      await _mutations.removePurpose(MutationPurpose.analytics);
     }
     if (purposes.feedback == false) {
       await _queue.removePurpose(EventPurpose.feedback);
@@ -400,35 +571,87 @@ class UserGistCore {
     String token,
     String platform,
     String environment,
+  ) =>
+      _serializePush(() => _registerPushToken(token, platform, environment));
+
+  Future<void> _registerPushToken(
+    String token,
+    String platform,
+    String environment,
   ) async {
-    if (!_consent.isPushGranted) return;
-    final result = await _api.postJson(
-      SdkEndpoints.pushRegisterToken,
-      <String, Object?>{
-        'anonymousId': identity.anonymousId,
-        'externalId': identity.externalId,
-        'token': token,
-        'platform': platform,
-        'environment': environment,
-        'language': null,
-        'timezone': DateTime.now().timeZoneName,
-        'sdkVersion': sdkVersion,
-        'optIn': true,
-      },
-    );
-    if (result.success) _lastPushToken = token;
+    if (_resetInProgress) return;
+    final generation = _resetGeneration;
+    final desired = <String, Object?>{
+      'token': token,
+      'platform': platform,
+      'environment': environment
+    };
+    if (jsonEncode(_pushRegistration) != jsonEncode(desired) &&
+        !await _secureStore.writeStringStrict(
+            'push.registration', jsonEncode(desired))) return;
+    if (_resetInProgress || generation != _resetGeneration) return;
+    _pushRegistration = desired;
+    if (!_consent.isPushGranted) {
+      notifyPushSubscription();
+      return;
+    }
+    await _revocations.drain();
+    if (await _revocations.isPending() ||
+        _resetInProgress ||
+        generation != _resetGeneration) return;
+    final key = _pushOwnerKey(token);
+    if (_pushRegistrationAttempt != null ||
+        (_pushRegistrationKey == key &&
+            DateTime.now().difference(_pushRegisteredAt).inHours < 24)) return;
+    _pushRegistrationAttempt = key;
+    try {
+      final result = await _api.postJson(
+        SdkEndpoints.pushRegisterToken,
+        <String, Object?>{
+          'anonymousId': identity.anonymousId,
+          'externalId': identity.externalId,
+          'token': token,
+          'platform': platform,
+          'environment': environment,
+          'language': null,
+          'timezone': DateTime.now().timeZoneName,
+          'sdkVersion': sdkVersion,
+          'optIn': true,
+        },
+      );
+      if (_resetInProgress ||
+          generation != _resetGeneration ||
+          key != _pushOwnerKey(token) ||
+          _pushRegistration?['token'] != token ||
+          !_consent.isPushGranted) return;
+      if (result.success && result.data?['registered'] == true) {
+        _lastPushToken = token;
+        _pushRegistrationKey = key;
+        _pushRegisteredAt = DateTime.now();
+      }
+      notifyPushSubscription();
+    } finally {
+      if (_pushRegistrationAttempt == key) _pushRegistrationAttempt = null;
+    }
   }
 
-  Future<void> invalidatePushToken(String token) async {
-    final result = await _api.postJson(
-      SdkEndpoints.pushInvalidateToken,
-      <String, Object?>{
-        'anonymousId': identity.anonymousId,
-        'token': token,
-      },
-    );
-    if (result.success && _lastPushToken == token) _lastPushToken = null;
-  }
+  Future<void> invalidatePushToken(String token) => _serializePush(() async {
+        if (_pushRegistration?['token'] == token) {
+          await _secureStore.remove('push.registration');
+          _pushRegistration = null;
+          _pushRegistrationKey = null;
+          _pushRegisteredAt = DateTime.fromMillisecondsSinceEpoch(0);
+        }
+        if (_lastPushToken == token) _lastPushToken = null;
+        notifyPushSubscription();
+        await _api.postJson(
+          SdkEndpoints.pushInvalidateToken,
+          <String, Object?>{
+            'anonymousId': identity.anonymousId,
+            'token': token,
+          },
+        );
+      });
 
   /// Rebinds a registered token after a successful identified-subject swap.
   Future<void> rebindPushToken(String externalId) async {
@@ -685,32 +908,30 @@ class UserGistCore {
   }
 
   /// Clears all local state.
-  Future<void> reset() async {
-    if (_resetInProgress) return;
+  Future<void> reset() => _resetFuture ??= _performReset().whenComplete(() {
+        _resetFuture = null;
+      });
+
+  Future<void> _performReset() async {
+    if (!_resetInProgress) {
+      _pendingResetToken = _subjectToken;
+      _pendingResetAlias = identity.anonymousId;
+    }
     _resetInProgress = true;
+    requestsCache.clear();
     _resetGeneration += 1;
     presentationGate.invalidate();
     _resetCtrl.add(null);
     try {
-      final session = _sessionFuture;
-      final mutations = _mutationFuture;
-      final inflight = <Future<Object?>>[
-        if (session != null) session.then<Object?>((_) => null),
-        if (mutations != null) mutations.then<Object?>((_) => null),
-      ];
-      if (inflight.isNotEmpty) {
-        await Future.wait<Object?>(
-          inflight.map(
-            (future) => future.catchError((Object _, StackTrace __) => null),
-          ),
-        );
-      }
-      if (identical(_sessionFuture, session)) _sessionFuture = null;
-      if (identical(_mutationFuture, mutations)) _mutationFuture = null;
-      await _api.postJson(
-        SdkEndpoints.sessionRevoke,
-        const <String, Object?>{},
-      );
+      _notifyIdentity('resetting');
+      _api.cancelAll();
+      _api.setSubjectToken(null);
+      await _revocations.remember(
+          _pendingResetToken ?? await _secureStore.readString(_subjectTokenKey),
+          _pendingResetAlias!);
+      _sessionFuture = null;
+      _inflightFlush = null;
+      _mutationFuture = null;
       await _queue.clear();
       await _mutations.clear();
       await _rulesCache.clear();
@@ -726,6 +947,8 @@ class UserGistCore {
       await _localInstructionDedupe.clear();
       _subjectToken = null;
       _lastPushToken = null;
+      _pushRegistrationKey = null;
+      _pushRegistrationAttempt = null;
       _api.setSubjectToken(null);
       _shownAt.clear();
       _eventCounts.clear();
@@ -737,14 +960,25 @@ class UserGistCore {
       _appOpenPending = false;
       _identityProperties.clear();
       _sessionId = _newSessionId();
-      await _ensureSubjectSession(allowDuringReset: true);
-    } finally {
-      _resetInProgress = false;
+    } on Object {
+      _notifyIdentity('reset-failed');
+      rethrow;
     }
+    _resetInProgress = false;
+    _pendingResetToken = null;
+    _pendingResetAlias = null;
+    _notifyIdentity('anonymous');
+    notifyPushSubscription();
+    _runAsync(_revocations.drain(), 'logout cleanup');
+    startNetworkDelivery();
   }
 
   /// Flushes the event queue to the server. Consent-gated.
   Future<void> flush() async {
+    if (_resetInProgress) return;
+    _runAsync(_revocations.drain(), 'logout cleanup');
+    _runAsync(_retryPushRegistration(), 'push registration');
+    final generation = _resetGeneration;
     try {
       await _ensureSubjectSession();
     } on Object catch (error, stack) {
@@ -764,7 +998,9 @@ class UserGistCore {
     final completer = Completer<void>();
     _inflightFlush = completer.future;
     try {
-      while (!_queue.isEmpty) {
+      while (!_resetInProgress &&
+          generation == _resetGeneration &&
+          !_queue.isEmpty) {
         final allowed = _queue.peek(_queue.length).where((event) {
           return event.purpose == EventPurpose.analytics
               ? _consent.isAnalyticsGranted
@@ -790,7 +1026,8 @@ class UserGistCore {
           final permanent = res.status != null &&
               res.status! >= 400 &&
               res.status! < 500 &&
-              res.status != 429;
+              res.status != 429 &&
+              res.status != 401;
           if (permanent) {
             if (batch.length == 1) {
               await _queue.remove(<String>[first.eventId]);
@@ -808,7 +1045,8 @@ class UserGistCore {
                 (single.status != null &&
                     single.status! >= 400 &&
                     single.status! < 500 &&
-                    single.status != 429)) {
+                    single.status != 429 &&
+                    single.status != 401)) {
               await _queue.remove(<String>[first.eventId]);
               if (!single.success) {
                 log.w(
@@ -824,7 +1062,7 @@ class UserGistCore {
         await _queue.remove(batch.map((event) => event.eventId));
       }
     } finally {
-      _inflightFlush = null;
+      if (identical(_inflightFlush, completer.future)) _inflightFlush = null;
       if (!completer.isCompleted) completer.complete();
     }
     await pollInstructions();
@@ -1150,6 +1388,10 @@ class UserGistCore {
     _ensureCurrentGeneration(generation, allowDuringReset: allowDuringReset);
     final mayRotate =
         result.status == 401 || result.status == 403 || result.status == 409;
+    if (!result.success && identity.externalId != null) {
+      await _recoverIdentity();
+      return;
+    }
     if (!result.success && mayRotate) {
       // A known anonymous id cannot be claimed twice. If its credential is
       // expired/revoked, rotate the installation identity before retrying.
@@ -1178,6 +1420,7 @@ class UserGistCore {
     _ensureCurrentGeneration(generation, allowDuringReset: allowDuringReset);
     _subjectToken = token;
     _api.setSubjectToken(token);
+    _notifyIdentity(identity.externalId == null ? 'anonymous' : 'identified');
   }
 
   Future<Set<String>> _flushMutations() {
@@ -1198,6 +1441,8 @@ class UserGistCore {
       if (_resetInProgress || _resetGeneration != generation) return rejected;
       final mutation = _mutations.first;
       if (mutation == null) break;
+      if (mutation.purpose == MutationPurpose.analytics &&
+          !_consent.isAnalyticsGranted) break;
       if (mutation.purpose == MutationPurpose.feedback &&
           !_consent.isFeedbackGranted) {
         break;
@@ -1205,6 +1450,28 @@ class UserGistCore {
       if (mutation.purpose == MutationPurpose.survey &&
           !_consent.current.allowsSurvey) {
         break;
+      }
+      if (_consent.isAnalyticsGranted &&
+          (mutation.kind == MutationKind.identify ||
+              mutation.kind == MutationKind.userProperties)) {
+        final synced = await _api.postJson(
+            SdkEndpoints.consent,
+            <String, Object?>{
+              'anonymousId': identity.anonymousId,
+              'externalId': identity.externalId,
+              'purposes': _consent.current.toResolvedJson(),
+              'version': _consent.version,
+              'effectiveAt': _consent.updatedAt.toIso8601String(),
+            },
+            subjectTokenOverride: identity.externalId != null &&
+                    mutation.kind == MutationKind.identify
+                ? mutation.payload['subjectToken'] as String?
+                : null);
+        if (!synced.success ||
+            _resetInProgress ||
+            generation != _resetGeneration) break;
+        if (mutation.kind == MutationKind.userProperties &&
+            !_consent.isAnalyticsGranted) continue;
       }
       ApiResult<Map<String, Object?>> result;
       if (mutation.kind == MutationKind.identify) {
@@ -1223,16 +1490,19 @@ class UserGistCore {
           <String, Object?>{
             'anonymousId': anonymousId,
             'externalId': externalId,
-            if (mutation.payload['properties'] is Map<String, Object?>)
+            if (_subjectToken != null) 'previousSubjectToken': _subjectToken,
+            if (_consent.isAnalyticsGranted &&
+                mutation.payload['properties'] is Map<String, Object?>)
               'properties': mutation.payload['properties'],
           },
           subjectTokenOverride: token,
         );
         if (_resetInProgress || _resetGeneration != generation) return rejected;
         if (result.success) {
+          final sessionToken = result.data?['subjectToken'] as String? ?? token;
           final persisted = await _secureStore.writeStringStrict(
             _subjectTokenKey,
-            token,
+            sessionToken,
           );
           if (!persisted) {
             break;
@@ -1240,19 +1510,38 @@ class UserGistCore {
           if (_resetInProgress || _resetGeneration != generation) {
             return rejected;
           }
-          _subjectToken = token;
-          _api.setSubjectToken(token);
+          _subjectToken = sessionToken;
+          _api.setSubjectToken(sessionToken);
           if (identity.externalId != externalId) presentationGate.invalidate();
           await identity.setExternalId(externalId);
-          final properties = mutation.payload['properties'];
-          if (properties is Map<String, Object?> && properties.isNotEmpty) {
-            await identity.setExternalProperties(safeEncode(properties));
+          if (_resetInProgress || generation != _resetGeneration)
+            return rejected;
+          _notifyIdentity('identified');
+          final supplied = mutation.payload['properties'];
+          final filtered = result.data?['filteredKeys'] as List<Object?>?;
+          final properties = supplied is Map<String, Object?>
+              ? (filtered == null
+                  ? sanitizeProperties(supplied)
+                  : Map<String, Object?>.fromEntries(supplied.entries
+                      .where((entry) => !filtered.contains(entry.key))))
+              : null;
+          final profile = result.data?['properties'];
+          if (profile is Map<String, Object?>) {
+            _identityProperties = Map<String, Object?>.from(profile);
+            await identity
+                .setExternalProperties(safeEncode(_identityProperties));
+          } else if (properties is Map<String, Object?> &&
+              properties.isNotEmpty) {
             _identityProperties = <String, Object?>{
               ..._identityProperties,
-              ...properties,
+              ...properties
             };
+            await identity
+                .setExternalProperties(safeEncode(_identityProperties));
           }
-          await rebindPushToken(externalId);
+          if (_resetInProgress || generation != _resetGeneration)
+            return rejected;
+          _runAsync(_retryPushRegistration(), 'push registration');
           if (_consent.isAnalyticsGranted) {
             track(
               '\$identify',
@@ -1261,6 +1550,23 @@ class UserGistCore {
                   : const <String, Object?>{},
             );
           }
+        }
+      } else if (mutation.kind == MutationKind.userProperties) {
+        result =
+            await _api.postJson('/v1/sdk/user-properties', mutation.payload);
+        if (_resetInProgress || _resetGeneration != generation) return rejected;
+        if (result.success) {
+          final filtered =
+              result.data?['filteredKeys'] as List<Object?>? ?? <Object?>[];
+          final set = mutation.payload['set'] as Map<String, Object?>? ??
+              <String, Object?>{};
+          _identityProperties.addAll(Map<String, Object?>.fromEntries(
+              set.entries.where((entry) => !filtered.contains(entry.key))));
+          for (final key
+              in mutation.payload['unset'] as List<Object?>? ?? <Object?>[]) {
+            _identityProperties.remove(key);
+          }
+          await identity.setExternalProperties(safeEncode(_identityProperties));
         }
       } else if (mutation.kind == MutationKind.feedbackResponse) {
         result = await _api.postJson(SdkEndpoints.responses, mutation.payload);
@@ -1291,11 +1597,15 @@ class UserGistCore {
         await _mutations.remove(mutation.id);
         continue;
       }
+      if (result.status == 401 && mutation.kind == MutationKind.identify)
+        _notifyIdentity('authentication-required');
       final permanent = result.status != null &&
           result.status! >= 400 &&
           result.status! < 500 &&
-          result.status != 429;
+          result.status != 429 &&
+          result.status != 401;
       if (permanent) {
+        if (mutation.kind == MutationKind.identify) _notifyIdentity('rejected');
         await _mutations.remove(mutation.id);
         rejected.add(mutation.id);
         log.w(
