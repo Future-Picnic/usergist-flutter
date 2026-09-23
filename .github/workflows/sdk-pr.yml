@@ -35,5 +35,11 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
-      - run: dart doc --output "$RUNNER_TEMP/usergist-flutter-docs"
+      # Bundled dartdoc 9.0.6 can crash in _stripDocImports; fixed in 9.0.8+.
+      # Match the former release check: generate docs on current stable only.
+      - name: Generate release API documentation
+        if: matrix.version == 'stable'
+        run: |
+          dart pub global activate dartdoc 9.0.9
+          dart pub global run dartdoc --output "$RUNNER_TEMP/usergist-flutter-docs"
       - run: dart pub publish --dry-run
