@@ -35,4 +35,5 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
+      - run: dart doc --output "$RUNNER_TEMP/usergist-flutter-docs"
       - run: dart pub publish --dry-run
